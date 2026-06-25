@@ -1,0 +1,5 @@
+print("=== TEST LOADER ===")
+print("Loader berhasil dijalankan!")
+print("GameId:", game.GameId)
+print("PlaceId:", game.PlaceId)
+print("=== END TEST ===")
