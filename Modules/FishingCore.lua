@@ -1,28 +1,51 @@
 --!strict
 -- FishingCore.lua - Semua logika fishing (Instant, Legit, Blatant, UB, Amblatant)
+-- Version: 2.0.0
 
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
-local FishingCore = {
-    _loopTask = nil,
-    _isRunning = false,
-    _notifHooked = false,
-}
-
--- PI untuk kalkulasi casting
 local PI = math.pi
 local CAST_MODE_LIST = { "Perfect", "Fast", "Random" }
 
--- ============================================
--- DEPENDENCIES (diisi oleh Loader)
--- ============================================
-FishingCore._State = nil
-FishingCore._Remote = nil
-FishingCore._Utils = nil
+local FishingCore = {
+    -- State
+    _State = nil,
+    _Remote = nil,
+    _Utils = nil,
+    
+    -- Loop Handles
+    _ubTask = nil,
+    _legitTask = nil,
+    _blatantTask = nil,
+    _isUBRunning = false,
+    _isLegitRunning = false,
+    _isBlatantRunning = false,
+    
+    -- Notification Hook
+    _notifHooked = false,
+    
+    -- Natural Hook
+    _naturalHookInstalled = false,
+    _naturalRainbowCount = 0,
+    _naturalGoldenCount = 0,
+    _naturalFishCount = 0,
+    isCaught = false,
+    
+    -- Bobber
+    _bobberState = {
+        active = false,
+        baits = {},
+        cosmeticFolder = nil,
+        connections = {},
+    },
+}
 
+-- ============================================
+-- DEPENDENCIES
+-- ============================================
 function FishingCore:Init(State, Remote, Utils)
     self._State = State
     self._Remote = Remote
@@ -30,7 +53,7 @@ function FishingCore:Init(State, Remote, Utils)
 end
 
 -- ============================================
--- HELPERS
+-- PRIVATE HELPERS
 -- ============================================
 local function getPowerAtTime(chargeTime: number, elapsed: number): number
     local speed = Random.new(chargeTime):NextInteger(4, 10)
@@ -38,7 +61,7 @@ local function getPowerAtTime(chargeTime: number, elapsed: number): number
     return (1 - math.sin(angle)) / 2
 end
 
-local function waitForPower(chargeTime: number, threshold: number)
+local function waitForPower(chargeTime: number, threshold: number): (number, number)
     local deadline = chargeTime + 2.0
     while Workspace:GetServerTimeNow() < deadline do
         local elapsed = Workspace:GetServerTimeNow() - chargeTime
@@ -50,10 +73,7 @@ local function waitForPower(chargeTime: number, threshold: number)
     return elapsed, getPowerAtTime(chargeTime, elapsed)
 end
 
-local function handleCastMode(t0: number): number
-    local state = FishingCore._State
-    local mode = state.UB.Settings.CastMode
-    
+local function handleCastMode(t0: number, mode: string): number
     if mode == "Perfect" then
         local _, power = waitForPower(t0, 0.97)
         return power
@@ -68,23 +88,26 @@ local function handleCastMode(t0: number): number
     end
 end
 
-local function safeInvoke(remote, ...)
-    if not remote then return end
+local function safeInvoke(remote, ...): boolean
+    if not remote then return false end
     local args = { ... }
-    task.spawn(function()
-        pcall(function() remote:InvokeServer(unpack(args)) end)
+    local ok = pcall(function()
+        remote:InvokeServer(unpack(args))
     end)
+    return ok
 end
 
-local function safeFire(remote, ...)
-    if not remote then return end
-    task.spawn(function()
-        pcall(function() remote:FireServer(...) end)
+local function safeFire(remote, ...): boolean
+    if not remote then return false end
+    local args = { ... }
+    local ok = pcall(function()
+        remote:FireServer(unpack(args))
     end)
+    return ok
 end
 
 -- ============================================
--- HOOK NOTIFICATION DELAY (Untuk Instant Fishing V2)
+-- NOTIFICATION HOOK
 -- ============================================
 function FishingCore:_hookNotificationDelay()
     if self._notifHooked then return end
@@ -92,7 +115,10 @@ function FishingCore:_hookNotificationDelay()
     local ok, controller = pcall(function()
         return require(game:GetService("ReplicatedStorage").Controllers.TextNotificationController)
     end)
-    if not ok or not controller then return end
+    if not ok or not controller then 
+        warn("[FishingCore] TextNotificationController not found")
+        return 
+    end
     
     local originalDeliver = controller.DeliverNotification
     controller.DeliverNotification = function(self, data, ...)
@@ -105,11 +131,28 @@ function FishingCore:_hookNotificationDelay()
 end
 
 -- ============================================
--- INSTANT FISHING V2 (UB - Ultra Blatant)
+-- ULTRA BLATANT (UB) - Instant Fishing V2
 -- ============================================
-function FishingCore:startLoop()
-    if self._isRunning then return end
-    self._isRunning = true
+function FishingCore:startUB()
+    if self._isUBRunning then
+        warn("[FishingCore] UB already running")
+        return
+    end
+    
+    local state = self._State
+    state.UB.Active = true
+    state.UB.Stats.startTime = tick()
+    state.HookNotif = true
+    self._hookNotificationDelay()
+    self._isUBRunning = true
+    
+    self._ubTask = task.spawn(function()
+        self:_ubLoop()
+    end)
+    print("[FishingCore] ✅ UB started")
+end
+
+function FishingCore:_ubLoop()
     local state = self._State
     local remote = self._Remote
     
@@ -120,61 +163,114 @@ function FishingCore:startLoop()
     while state.UB.Active do
         local t0 = Workspace:GetServerTimeNow()
         safeInvoke(RF_Charge, nil, nil, t0, nil)
-        local power = handleCastMode(t0)
+        local power = handleCastMode(t0, state.UB.Settings.CastMode or "Fast")
         safeInvoke(RF_StartMini, 0, power, t0)
-        task.wait(state.UB.Settings.CompleteDelay)
+        task.wait(state.UB.Settings.CompleteDelay or 3.7)
         task.wait(0.01)
         safeFire(RE_CatchDone)
-        task.wait(state.UB.Settings.CancelDelay)
+        task.wait(state.UB.Settings.CancelDelay or 0.2)
     end
-    self._isRunning = false
-end
-
-function FishingCore:startUB()
-    local state = self._State
-    state.UB.Active = true
-    state.UB.Stats.startTime = tick()
-    self._hookNotificationDelay()
-    state.HookNotif = true
-    self._loopTask = task.spawn(function() self:startLoop() end)
+    
+    self._isUBRunning = false
+    print("[FishingCore] UB loop stopped")
 end
 
 function FishingCore:stopUB()
-    local state = self._State
-    state.UB.Active = false
-    state.HookNotif = false
-    if self._loopTask then
-        pcall(task.cancel, self._loopTask)
-        self._loopTask = nil
+    self._State.UB.Active = false
+    self._State.HookNotif = false
+    if self._ubTask then
+        pcall(task.cancel, self._ubTask)
+        self._ubTask = nil
     end
-    self._isRunning = false
+    self._isUBRunning = false
+    print("[FishingCore] UB stopped")
+end
+
+function FishingCore:isUBRunning(): boolean
+    return self._isUBRunning
 end
 
 -- ============================================
 -- LEGIT AUTO FARM
 -- ============================================
-function FishingCore:legitFarmLoop()
+function FishingCore:startLegitFarm()
+    if self._isLegitRunning then
+        warn("[FishingCore] Legit farm already running")
+        return
+    end
+    self._isLegitRunning = true
+    self._legitTask = task.spawn(function()
+        self:_legitLoop()
+    end)
+    print("[FishingCore] ✅ Legit farm started")
+end
+
+function FishingCore:_legitLoop()
     local state = self._State
     local remote = self._Remote
-    local FishingController = require(game:GetService("ReplicatedStorage").Controllers.FishingController)
+    
+    local FishingController
+    local ok = pcall(function()
+        FishingController = require(game:GetService("ReplicatedStorage").Controllers.FishingController)
+    end)
+    if not ok then
+        warn("[FishingCore] FishingController not found, cannot run legit farm")
+        self._isLegitRunning = false
+        return
+    end
+    
     local RE_FishDone = remote.getRemote("CatchFishCompleted")
     
     while state.AutoFarm and state.CurrentFishingMode == "Legit" do
-        pcall(function()
+        local success = pcall(function()
             FishingController:RequestChargeFishingRod(Vector2.new(0, 0), true)
             task.wait(1)
-            remote.fireServer("CatchFishCompleted", 1)
+            safeFire(RE_FishDone, 1)
         end)
+        if not success then
+            warn("[FishingCore] Legit loop error, waiting...")
+            task.wait(1)
+        end
         task.wait(0.4 + math.random() * 0.3)
     end
+    
+    self._isLegitRunning = false
+    print("[FishingCore] Legit farm stopped")
+end
+
+function FishingCore:stopLegitFarm()
+    self._State.AutoFarm = false
+    if self._legitTask then
+        pcall(task.cancel, self._legitTask)
+        self._legitTask = nil
+    end
+    self._isLegitRunning = false
+    print("[FishingCore] Legit farm stopped")
+end
+
+function FishingCore:isLegitRunning(): boolean
+    return self._isLegitRunning
 end
 
 -- ============================================
 -- BLATANT SKIP CYCLE (Fast Reel)
 -- ============================================
-function FishingCore:blatantSkipCycle()
+function FishingCore:startBlatant()
+    if self._isBlatantRunning then
+        warn("[FishingCore] Blatant already running")
+        return
+    end
+    self._isBlatantRunning = true
+    self._blatantTask = task.spawn(function()
+        self:_blatantLoop()
+    end)
+    print("[FishingCore] ✅ Blatant started")
+end
+
+function FishingCore:_blatantLoop()
     local state = self._State
     local remote = self._Remote
+    
     local ChargeRod = remote.getRemote("ChargeFishingRod")
     local StartMini = remote.getRemote("RequestFishingMinigameStarted")
     local CatchFish = remote.getRemote("CatchFishCompleted")
@@ -191,26 +287,46 @@ function FishingCore:blatantSkipCycle()
         pcall(function() CatchFish:InvokeServer(1) end)
         task.wait(loopDelay)
     end
+    
+    self._isBlatantRunning = false
+    print("[FishingCore] Blatant stopped")
+end
+
+function FishingCore:stopBlatant()
+    self._State.BlatantMode = false
+    if self._blatantTask then
+        pcall(task.cancel, self._blatantTask)
+        self._blatantTask = nil
+    end
+    self._isBlatantRunning = false
+    print("[FishingCore] Blatant stopped")
+end
+
+function FishingCore:isBlatantRunning(): boolean
+    return self._isBlatantRunning
 end
 
 -- ============================================
 -- AMBLATANT NATURAL HOOK
 -- ============================================
-FishingCore._naturalHookInstalled = false
-FishingCore._naturalRainbowCount = 0
-FishingCore._naturalGoldenCount = 0
-FishingCore._naturalFishCount = 0
-FishingCore.isCaught = false
-
 function FishingCore:installNaturalHook()
-    if self._naturalHookInstalled then return end
-    if type(hookfunction) ~= "function" then return end
+    if self._naturalHookInstalled then
+        warn("[FishingCore] Natural hook already installed")
+        return
+    end
+    if type(hookfunction) ~= "function" then
+        warn("[FishingCore] hookfunction not available")
+        return
+    end
     
     local Event
     pcall(function()
         Event = game:GetService("ReplicatedStorage").Packages._Index["ytrev_replion@2.0.0-rc.3"].replion.Remotes.Set
     end)
-    if not Event or not Event.OnClientEvent then return end
+    if not Event or not Event.OnClientEvent then
+        warn("[FishingCore] Natural hook remote not found")
+        return 
+    end
     
     local conns = getconnections(Event.OnClientEvent) or {}
     for _, Connection in pairs(conns) do
@@ -248,33 +364,44 @@ function FishingCore:installNaturalHook()
         end
     end
     self._naturalHookInstalled = true
+    print("[FishingCore] ✅ Natural hook installed")
+end
+
+function FishingCore:uninstallNaturalHook()
+    self._naturalHookInstalled = false
+    self._naturalRainbowCount = 0
+    self._naturalGoldenCount = 0
+    self._naturalFishCount = 0
+    self.isCaught = false
+    print("[FishingCore] Natural hook uninstalled")
 end
 
 -- ============================================
--- INSTANT BOBBER OVERRIDE
+-- INSTANT BOBBER
 -- ============================================
-FishingCore._bobberState = {
-    active = false,
-    baits = {},
-    cosmeticFolder = nil,
-    connections = {},
-}
-
 function FishingCore:enableInstantBobber(enabled: boolean)
     local state = self._bobberState
     if enabled then
+        if state.active then
+            warn("[FishingCore] Instant bobber already enabled")
+            return
+        end
         state.active = true
         state.baits = {}
         
         local ok, folder = pcall(function() return Workspace:WaitForChild("CosmeticFolder", 5) end)
-        if not ok then return end
+        if not ok or not folder then
+            warn("[FishingCore] CosmeticFolder not found, cannot enable bobber")
+            state.active = false
+            return
+        end
         state.cosmeticFolder = folder
         
         local remote = self._Remote
         local BaitCast = remote.getRemote("BaitCastVisual")
         local BaitDestroyed = remote.getRemote("BaitDestroyed")
         
-        if BaitCast then
+        if BaitCast and BaitCast:IsA("RemoteEvent") then
             state.connections.cast = BaitCast.OnClientEvent:Connect(function(player, data)
                 if not state.active or not player then return end
                 if data and data.CastPosition then
@@ -283,7 +410,7 @@ function FishingCore:enableInstantBobber(enabled: boolean)
             end)
         end
         
-        if BaitDestroyed then
+        if BaitDestroyed and BaitDestroyed:IsA("RemoteEvent") then
             state.connections.destroy = BaitDestroyed.OnClientEvent:Connect(function(player)
                 if not state.active or not player then return end
                 state.baits[player.UserId] = nil
@@ -294,8 +421,9 @@ function FishingCore:enableInstantBobber(enabled: boolean)
             if not state.active then return end
             local folder = state.cosmeticFolder
             if not folder then return end
+            local now = tick()
             for userId, entry in pairs(state.baits) do
-                if tick() > entry.expires then
+                if now > entry.expires then
                     state.baits[userId] = nil
                 else
                     local model = folder:FindFirstChild(tostring(userId))
@@ -305,13 +433,32 @@ function FishingCore:enableInstantBobber(enabled: boolean)
                 end
             end
         end)
+        print("[FishingCore] ✅ Instant bobber enabled")
     else
         state.active = false
+        state.baits = {}
         for _, conn in pairs(state.connections) do
             pcall(conn.Disconnect, conn)
         end
         state.connections = {}
+        print("[FishingCore] Instant bobber disabled")
     end
+end
+
+function FishingCore:isBobberEnabled(): boolean
+    return self._bobberState.active
+end
+
+-- ============================================
+-- CLEANUP (Untuk destroy saat script berhenti)
+-- ============================================
+function FishingCore:cleanup()
+    self:stopUB()
+    self:stopLegitFarm()
+    self:stopBlatant()
+    self:enableInstantBobber(false)
+    self:uninstallNaturalHook()
+    print("[FishingCore] Cleanup complete")
 end
 
 return FishingCore
