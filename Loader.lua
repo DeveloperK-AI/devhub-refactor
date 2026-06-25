@@ -1,95 +1,144 @@
--- Loader.lua (Debug Version)
 print("[Loader] ========================================")
 print("[Loader] devHub Refactored - Starting...")
 print("[Loader] ========================================")
 
+-- === CEK FUNGSI DASAR ===
+print("[Loader] Step 0: Testing game:HttpGet...")
+local testContent = pcall(function()
+    return game:HttpGet("https://raw.githubusercontent.com/DeveloperK-AI/devhub-refactor/main/Modules/State.lua")
+end)
+if testContent then
+    print("[Loader] ✅ game:HttpGet works!")
+else
+    warn("[Loader] ❌ game:HttpGet FAILED!")
+    return
+end
+
+-- === URL CONFIG ===
 local BASE_URL = "https://raw.githubusercontent.com/DeveloperK-AI/devhub-refactor/main/Modules/"
 
--- Fungsi untuk memuat module dengan error handling dan logging
-local function loadModule(name)
-    print("[Loader] 📦 Loading module: " .. name)
+-- === FUNGSI LOAD MODULE ===
+function loadModule(name)
+    print("[Loader] 📦 Loading: " .. name)
     local url = BASE_URL .. name .. ".lua"
     print("[Loader]    URL: " .. url)
     
-    local success, result = pcall(function()
-        local content = game:HttpGet(url)
-        print("[Loader]    Content length: " .. #content .. " bytes")
-        local fn = loadstring(content)
-        if not fn then
-            error("loadstring returned nil for " .. name)
-        end
-        return fn()
+    local success, content = pcall(function()
+        return game:HttpGet(url)
     end)
     
     if not success then
-        warn("[Loader] ❌ Failed to load " .. name .. ": " .. tostring(result))
+        warn("[Loader] ❌ HttpGet failed for " .. name .. ": " .. tostring(content))
         return nil
     end
     
-    print("[Loader] ✅ " .. name .. " loaded successfully")
+    print("[Loader]    Content length: " .. #content .. " bytes")
+    
+    local fn, err = loadstring(content)
+    if not fn then
+        warn("[Loader] ❌ loadstring failed for " .. name .. ": " .. tostring(err))
+        return nil
+    end
+    
+    local ok, result = pcall(fn)
+    if not ok then
+        warn("[Loader] ❌ Execution failed for " .. name .. ": " .. tostring(result))
+        return nil
+    end
+    
+    print("[Loader] ✅ " .. name .. " loaded!")
     return result
 end
 
--- 1. Load State
+-- === MULAI LOAD SEMUA MODUL ===
 print("[Loader] Step 1: Loading State...")
 local State = loadModule("State")
-if not State then error("[Loader] CRITICAL: State is nil!") end
+if not State then 
+    warn("[Loader] CRITICAL: State is nil! STOPPING.")
+    return 
+end
+print("[Loader] State contents:", State)
 
--- 2. Load RemoteManager
 print("[Loader] Step 2: Loading RemoteManager...")
 local RemoteManager = loadModule("RemoteManager")
-if not RemoteManager then error("[Loader] CRITICAL: RemoteManager is nil!") end
+if not RemoteManager then 
+    warn("[Loader] CRITICAL: RemoteManager is nil! STOPPING.")
+    return 
+end
 
--- 3. Load Utils
 print("[Loader] Step 3: Loading Utils...")
 local Utils = loadModule("Utils")
-if not Utils then error("[Loader] CRITICAL: Utils is nil!") end
+if not Utils then 
+    warn("[Loader] CRITICAL: Utils is nil! STOPPING.")
+    return 
+end
 
--- 4. Load FishingCore
 print("[Loader] Step 4: Loading FishingCore...")
 local FishingCore = loadModule("FishingCore")
-if not FishingCore then error("[Loader] CRITICAL: FishingCore is nil!") end
+if not FishingCore then 
+    warn("[Loader] CRITICAL: FishingCore is nil! STOPPING.")
+    return 
+end
 
--- 5. Load QuestManager
 print("[Loader] Step 5: Loading QuestManager...")
 local QuestManager = loadModule("QuestManager")
-if not QuestManager then error("[Loader] CRITICAL: QuestManager is nil!") end
+if not QuestManager then 
+    warn("[Loader] CRITICAL: QuestManager is nil! STOPPING.")
+    return 
+end
 
--- 6. Load AutoFeatures
 print("[Loader] Step 6: Loading AutoFeatures...")
 local AutoFeatures = loadModule("AutoFeatures")
-if not AutoFeatures then error("[Loader] CRITICAL: AutoFeatures is nil!") end
+if not AutoFeatures then 
+    warn("[Loader] CRITICAL: AutoFeatures is nil! STOPPING.")
+    return 
+end
 
--- 7. Load UIManager
 print("[Loader] Step 7: Loading UIManager...")
 local UIManager = loadModule("UIManager")
-if not UIManager then error("[Loader] CRITICAL: UIManager is nil!") end
+if not UIManager then 
+    warn("[Loader] CRITICAL: UIManager is nil! STOPPING.")
+    return 
+end
 
-print("[Loader] ✅ All modules loaded successfully!")
+print("[Loader] ========================================")
+print("[Loader] ✅ SEMUA MODUL BERHASIL DIMUAT!")
 print("[Loader] ========================================")
 
--- Inisialisasi Core
-_G.Core = {
-    State = State,
-    Remote = RemoteManager,
-    Utils = Utils,
-    Fishing = FishingCore,
-    Quest = QuestManager,
-    Auto = AutoFeatures,
-    UI = nil,
-}
-
+-- === INJECT DEPENDENCIES ===
 print("[Loader] Injecting dependencies...")
-FishingCore:Init(State, RemoteManager, Utils)
-QuestManager:Init(State, RemoteManager, Utils)
-AutoFeatures:Init(State, RemoteManager, Utils)
-UIManager:Init(State, RemoteManager, Utils, FishingCore, QuestManager, AutoFeatures)
+local ok, err = pcall(function()
+    FishingCore:Init(State, RemoteManager, Utils)
+    QuestManager:Init(State, RemoteManager, Utils)
+    AutoFeatures:Init(State, RemoteManager, Utils)
+    UIManager:Init(State, RemoteManager, Utils, FishingCore, QuestManager, AutoFeatures)
+end)
+if not ok then
+    warn("[Loader] ❌ Failed to inject dependencies: " .. tostring(err))
+    return
+end
 
+-- === BUILD UI ===
 print("[Loader] Building UI...")
-UIManager:Build()
-print("[Loader] UI build completed!")
+local buildOk, buildErr = pcall(function()
+    UIManager:Build()
+end)
+if not buildOk then
+    warn("[Loader] ❌ UI Build failed: " .. tostring(buildErr))
+    return
+end
 
+print("[Loader] ✅ UI build complete!")
+
+-- === START LOOPS ===
 print("[Loader] Starting Quest loops...")
-QuestManager:startQuestLoops()
-print("[Loader] ✅ devHub Refactored is ready!")
+local loopOk, loopErr = pcall(function()
+    QuestManager:startQuestLoops()
+end)
+if not loopOk then
+    warn("[Loader] ❌ Quest loops failed: " .. tostring(loopErr))
+end
+
+print("[Loader] ========================================")
+print("[Loader] ✅ devHub Refactored READY!")
 print("[Loader] ========================================")
