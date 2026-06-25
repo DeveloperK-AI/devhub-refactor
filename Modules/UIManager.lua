@@ -29,16 +29,27 @@ end
 -- BUILD UI
 -- ============================================
 function UIManager:Build()
-    -- Load devLib UI Library
+    print("[UIManager] Loading devLib UI library...")
     local devLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/DeveloperK-AI/devhub-refactor/main/Libs/libdev.lua"))()
+    if not devLib then
+        warn("[UIManager] ❌ Failed to load devLib!")
+        return
+    end
+    print("[UIManager] ✅ devLib loaded successfully!")
     
     local Window = devLib:CreateWindow({
         Name = "devHub Professional",
         Intro = true,
     })
     
-    -- Simpan referensi ke Window untuk notifikasi
+    if not Window then
+        warn("[UIManager] ❌ Failed to create Window!")
+        return
+    end
+    print("[UIManager] ✅ Window created!")
+    
     _G.Core.UI = Window
+    -- ... lanjutkan kode sisanya ...
     
     -- ==========================================
     -- TAB: MAIN (Fishing)
