@@ -4784,13 +4784,159 @@ end)
 
 -- Respawn/recovery hook detection removed (no auto-respawn based on hook time).
 
+-- ============================================
+-- BLATANT V1 (STABLE) - Refactored
+-- ============================================
 MainTab:CreateSection({ Name = "Blatant V1 (STABLE)" })
 
+-- Inisialisasi global (tetap untuk kompatibilitas)
 _G.BlatantMode = _G.BlatantMode or false
+_G.AutoEquip = _G.AutoEquip or true
+_G.Speed = _G.Speed or 0.07
+_G.LoopDelay = _G.LoopDelay or 0.25
+_G.AmSpeed = _G.AmSpeed or _G.Speed
+_G.AmLoopDelay = _G.AmLoopDelay or _G.LoopDelay
 
+-- Variabel sesi
+local FishingSession = 0
+local Protected = false
+local BlatantThread = nil
+
+-- Wrapper remote yang di-cache (diambil sekali di luar loop)
+local function getRemotes()
+    local EquipTool = REEquip
+    local ChargeRod = ChargeRod
+    local StartMini = StartMini
+    local CatchFish = REFishDone
+    return EquipTool, ChargeRod, StartMini, CatchFish
+end
+
+-- Fungsi untuk mengamankan panggilan remote (tanpa alokasi fungsi baru per iterasi)
+local function safeInvokeRemote(remote, ...)
+    if not remote then return false end
+    local ok = pcall(remote.InvokeServer, remote, ...)
+    return ok
+end
+
+local function safeFireRemote(remote, ...)
+    if not remote then return false end
+    local ok = pcall(remote.FireServer, remote, ...)
+    return ok
+end
+
+-- Fungsi untuk memproses Amblatant spam (dipanggil sekali per tangkapan)
+local function processAmblatantSpam()
+    if not (_G.Amblatant and _G.SavedData and _G.SavedData.FishCaught and isCaught) then
+        return
+    end
+
+    -- Ambil remote sekali untuk menghindari pencarian berulang
+    local remoteFishCaught = GetServerRemote("RE/FishCaught")
+    local remoteCaughtVisual = GetServerRemote("RE/CaughtFishVisual")
+    local remoteFishNotif = GetServerRemote("RE/ObtainedNewFishNotification")
+
+    if not remoteFishCaught and not remoteCaughtVisual and not remoteFishNotif then
+        return
+    end
+
+    -- Fungsi untuk fire local event dengan aman
+    local function fireLocal(remote, data)
+        if remote and data then
+            FireLocalEvent(remote, unpack(data))
+        end
+    end
+
+    -- Tunggu sebentar lalu kirim 2 siklus
+    task.wait(0.3)
+    for _ = 1, 2 do
+        fireLocal(remoteFishCaught, _G.SavedData.FishCaught)
+        fireLocal(remoteCaughtVisual, _G.SavedData.CaughtVisual)
+        if remoteFishNotif and _G.SavedData.FishNotif then
+            FireLocalEvent(remoteFishNotif, unpack(_G.SavedData.FishNotif))
+            -- Spawn tambahan untuk notifikasi (tanpa nested spawn)
+            task.spawn(function()
+                for _ = 1, 2 do
+                    task.wait(2)
+                    FireLocalEvent(remoteFishNotif, unpack(_G.SavedData.FishNotif))
+                end
+            end)
+        end
+    end
+    isCaught = false
+end
+
+-- Fungsi utama Blatant Skip Cycle
+local function blatantSkipCycle(sessionId)
+    -- Cache remote untuk performa
+    local EquipTool, ChargeRod, StartMini, CatchFish = getRemotes()
+
+    -- Auto Equip (jika diaktifkan)
+    if _G.AutoEquip and EquipTool then
+        pcall(function() EquipTool:FireServer(1) end)
+        task.wait(0.25)
+    end
+
+    -- Loop utama
+    while Protected and FishingSession == sessionId do
+        -- Ambil kecepatan & delay dari konfigurasi
+        local speed = (_G.Amblatant and _G.AmSpeed) or _G.Speed
+        local loopDelay = (_G.Amblatant and _G.AmLoopDelay) or _G.LoopDelay
+
+        local t = workspace:GetServerTimeNow()
+
+        -- Charge
+        if ChargeRod then
+            safeInvokeRemote(ChargeRod, t)
+        end
+        task.wait(speed)
+
+        -- Start Minigame
+        if StartMini then
+            safeInvokeRemote(StartMini, -1, 1, t)
+        end
+        task.wait(speed)
+
+        -- Selesaikan tangkapan
+        if CatchFish then
+            safeFireRemote(CatchFish, 1)
+        end
+
+        -- Amblatant spam (hanya jika aktif)
+        if _G.Amblatant then
+            processAmblatantSpam()
+        end
+
+        task.wait(loopDelay)
+    end
+end
+
+-- Fungsi untuk toggle Blatant
+local function toggleBlatant(value)
+    if value then
+        if BlatantThread and not Protected then
+            -- Jika sudah berjalan, jangan restart
+            return
+        end
+        Protected = true
+        FishingSession = FishingSession + 1
+        local session = FishingSession
+        BlatantThread = task.spawn(blatantSkipCycle, session)
+        print("[Blatant] Started")
+    else
+        Protected = false
+        FishingSession = FishingSession + 1
+        if BlatantThread then
+            task.cancel(BlatantThread)
+            BlatantThread = nil
+        end
+        print("[Blatant] Stopped")
+    end
+end
+
+-- UI: Input Complete Delay
 MainTab:CreateInput({
-    Name = "Compleate Delay",
-    SideLabel = "Compleate Delay",
+    Name = "Complete Delay",
+    SideLabel = "Complete Delay",
     Default = tostring(Config.UB.Settings.CompleteDelay),
     Callback = function(text)
         local n = tonumber(text)
@@ -4801,6 +4947,7 @@ MainTab:CreateInput({
     end,
 })
 
+-- UI: Toggle Fast Reel
 MainTab:CreateToggle({
     Name = "Fast Reel",
     Default = _G.BlatantMode,
@@ -4808,110 +4955,22 @@ MainTab:CreateToggle({
         if _G.BlatantMode == state then return end
         _G.BlatantMode = state
         needCast = true
-        if state then
-            Protected = false
-            FishingSession = FishingSession + 1
+        -- Panggil toggle dengan state
+        toggleBlatant(state)
+        -- Panggil stub untuk FishingController (jika ada)
+        if applyUltraBlatant3NFishingControllerStub then
+            applyUltraBlatant3NFishingControllerStub(state)
         end
-        onToggleUB(state)
-        applyUltraBlatant3NFishingControllerStub(state)
+        -- Jika sebelumnya ada onToggleUB, tetap dipanggil
+        if onToggleUB then
+            onToggleUB(state)
+        end
     end,
 })
 
-svc = {
-    Players = game:GetService("Players"),
-    RS = game:GetService("ReplicatedStorage"),
-}
-
-player = svc.Players.LocalPlayer
-if not player.Character then player.CharacterAdded:Wait() end
-
--- Net already initialized
-
-EquipTool  = REEquip
-ChargeRod  = ChargeRod
-StartMini  = StartMini
-CatchFish  = REFishDone
-CancelFish = Cancel
-
-Protected = false
-FishingSession = 0
-
-_G.AutoEquip = true
-_G.Speed = 0.07       
-_G.LoopDelay = 0.25   
-_G.AmSpeed = _G.AmSpeed or _G.Speed
-_G.AmLoopDelay = _G.AmLoopDelay or _G.LoopDelay
-
-function ToggleBlatant(value)
-    if value then
-        Protected = true
-        FishingSession = FishingSession + 1
-        local session = FishingSession
-        task.spawn(BlatantSkipCycle, session)
-    else
-        Protected = false
-        FishingSession = FishingSession + 1
-    end
-end
-
-function IsSessionAlive(session)
-    return FishingSession == session
-end
-
-function BlatantSkipCycle(session)
-    if _G.AutoEquip then
-        pcall(function()
-            EquipTool:FireServer(1)
-        end)
-        task.wait(0.25)
-    end
-
-    while Protected and IsSessionAlive(session) do
-        local speed = (_G.Amblatant and _G.AmSpeed) or _G.Speed
-        local loopDelay = (_G.Amblatant and _G.AmLoopDelay) or _G.LoopDelay
-
-        t = workspace:GetServerTimeNow()
-        pcall(function()
-            ChargeRod:InvokeServer(t)
-        end)
-        task.wait(speed)
-        pcall(function()
-            StartMini:InvokeServer(-1, 1, t)
-        end)
-
-        task.wait(speed)
-        CallFishDone(CatchFish, 1)
-
-        -- Amblatant: spam local fish events using cached data (disalin dari blatant.lua)
-        if _G.Amblatant and _G.SavedData and _G.SavedData.FishCaught and isCaught then
-            task.spawn(function ()
-                task.wait(0.3)
-                for _ = 1, 2 do
-                    local xremote = GetServerRemote("RE/FishCaught")
-                    if xremote then
-                        FireLocalEvent(xremote, unpack(_G.SavedData.FishCaught))
-                    end
-                    xremote = GetServerRemote("RE/CaughtFishVisual")
-                    if xremote and _G.SavedData.CaughtVisual then
-                        FireLocalEvent(xremote, unpack(_G.SavedData.CaughtVisual))
-                    end
-                    xremote = GetServerRemote("RE/ObtainedNewFishNotification")
-                    if xremote and _G.SavedData.FishNotif then
-                        FireLocalEvent(xremote, unpack(_G.SavedData.FishNotif))
-                        task.spawn(function()
-                            for _ = 1, 2 do
-                                task.wait(2)
-                                FireLocalEvent(xremote, unpack(_G.SavedData.FishNotif))
-                            end
-                        end)
-                    end
-                end
-            end)
-            isCaught = false
-        end
-        task.wait(loopDelay)
-    end
-end
+-- ============================================
+-- (Kode selanjutnya tetap seperti semula)
+-- ============================================
 
 AmblatantTab:CreateSection({ Name = "AMBLATANT OR FAST FISHING" })
 
