@@ -548,6 +548,35 @@ do
     print("[PetsData] Loaded " .. #_G.PetsData .. " pets")
 end
 
+-- ============================================================
+-- PETS HELPER FUNCTIONS
+-- ============================================================
+function GetPetData(petName)
+    return _G.PetsData and _G.PetsData[petName]
+end
+
+function GetPetByTier(tier)
+    local result = {}
+    for name, pet in pairs(_G.PetsData or {}) do
+        if pet.Data and pet.Data.Tier == tier then
+            table.insert(result, name)
+        end
+    end
+    return result
+end
+
+function GetAllPetNames()
+    local names = {}
+    for name in pairs(_G.PetsData or {}) do
+        table.insert(names, name)
+    end
+    table.sort(names)
+    return names
+end
+
+-- Variabel global untuk menyimpan pet aktif
+_G.ActivePet = _G.ActivePet or "Tabby Cat"
+
 -- moons.lua: Config / Events / Tasks / needCast / skip / blatantFishCycleCount (FAST 3 KEDIP & UB)
 Config = {
     HookNotif = false,
@@ -1740,6 +1769,114 @@ ExclusiveTab:CreateToggle({
             
             Window:Notify({ Title = "Stopped", Content = "Cancelled!", Duration = 3, Icon = "x" })
         end
+    end
+})
+
+-- ============================================================
+-- PET COMPANION (Di dalam ExclusiveTab)
+-- ============================================================
+ExclusiveTab:CreateSection({ Name = "Pet Companion" })
+
+-- Dropdown pilih pet
+local petDropdown = ExclusiveTab:CreateDropdown({
+    Name = "Select Active Pet",
+    Items = GetAllPetNames(),
+    Default = _G.ActivePet or "Tabby Cat",
+    Callback = function(selected)
+        _G.ActivePet = selected
+        local petData = GetPetData(selected)
+        if petData then
+            Window:Notify({
+                Title = "Pet Selected",
+                Content = "Active: " .. selected .. " (Tier " .. petData.Data.Tier .. ")",
+                Duration = 2
+            })
+        end
+    end
+})
+
+-- Toggle untuk mengaktifkan fitur PetFishing
+ExclusiveTab:CreateToggle({
+    Name = "Enable Pet Fishing",
+    SubText = "Use pet's cast cooldown & reel duration",
+    Default = _G.PetFishingEnabled or false,
+    Callback = function(state)
+        _G.PetFishingEnabled = state
+        if state then
+            local petData = GetPetData(_G.ActivePet)
+            if petData and petData.PetFishing and petData.PetFishing.Enabled then
+                print("[Exclusive] PetFishing enabled for", _G.ActivePet)
+                Window:Notify({
+                    Title = "Pet Fishing",
+                    Content = "Enabled for " .. _G.ActivePet,
+                    Duration = 2
+                })
+                -- Panggil fungsi untuk mengaktifkan pet fishing (jika ada)
+                -- StartPetFishing(_G.ActivePet)
+            else
+                Window:Notify({
+                    Title = "Pet Not Available",
+                    Content = "Selected pet does not support PetFishing.",
+                    Duration = 2
+                })
+                _G.PetFishingEnabled = false
+            end
+        else
+            print("[Exclusive] PetFishing disabled")
+            Window:Notify({
+                Title = "Pet Fishing",
+                Content = "Disabled",
+                Duration = 2
+            })
+            -- StopPetFishing()
+        end
+    end
+})
+
+-- Tombol info pet
+ExclusiveTab:CreateButton({
+    Name = "Show Pet Info",
+    SubText = "Display details of active pet",
+    Callback = function()
+        local petData = GetPetData(_G.ActivePet)
+        if petData then
+            local info = string.format(
+                "Name: %s\nTier: %d\nPerk: %s (+%s)\nSell Price: %d\nPetFishing: %s\nCast: %.1fs\nReel: %.1fs",
+                petData.Data.Name or "N/A",
+                petData.Data.Tier or 0,
+                petData.Perk and petData.Perk.Type or "None",
+                tostring(petData.Perk and petData.Perk.Value or 0),
+                petData.SellPrice or 0,
+                petData.PetFishing and petData.PetFishing.Enabled and "✅ Enabled" or "❌ Disabled",
+                petData.PetFishing and petData.PetFishing.CastCooldownSeconds or 0,
+                petData.PetFishing and petData.PetFishing.ReelDurationSeconds or 0
+            )
+            Window:Notify({
+                Title = "Pet Info - " .. _G.ActivePet,
+                Content = info,
+                Duration = 5
+            })
+        else
+            Window:Notify({
+                Title = "Error",
+                Content = "Pet data not found for: " .. tostring(_G.ActivePet),
+                Duration = 3
+            })
+        end
+    end
+})
+
+-- Tombol refresh (jika data pet berubah)
+ExclusiveTab:CreateButton({
+    Name = "Refresh Pet List",
+    SubText = "Update dropdown if pets changed",
+    Callback = function()
+        petDropdown:Refresh(GetAllPetNames())
+        Window:Notify({
+            Title = "Pet List",
+            Content = "Refreshed! " .. #GetAllPetNames() .. " pets available.",
+            Duration = 2
+        })
     end
 })
 
