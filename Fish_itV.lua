@@ -123,6 +123,431 @@ REDialogueEnded      = RE("DialogueEnded")
 RFCreateTranscendedStone = RF("CreateTranscendedStone")
 EquipBait           = RE("EquipBait")
 
+-- ============================================================
+-- PETS DATA (dari module Pets)
+-- ============================================================
+-- Data ini berisi konfigurasi hewan peliharaan (pets) dalam game.
+-- Diambil dari module Shared.Pets, disimpan ke _G.PetsData
+-- agar bisa diakses dari mana saja.
+
+do
+    local v1 = game:GetService("ReplicatedStorage")
+    local v2 = require(v1.Shared.UserPriority)
+    require(v1.Types.Modifiers)  -- hanya untuk load, tidak digunakan langsung
+
+    -- Multiplier untuk test session (0.1) vs production (1)
+    local v3 = v2:IsValidTestSession() and 0.1 or 1
+
+    -- Interval cast universal: 2 detik (dikalikan v3 untuk test session scaling)
+    local CAST_COOLDOWN = v3 * 2
+
+    -- Durasi reel per tier — proporsional, tier lebih tinggi reel lebih cepat
+    -- Semua pet kini enabled = true
+    local REEL_DURATION = {
+        [1] = v3 * 65,  -- Tier 1 (paling lambat)
+        [2] = v3 * 55,
+        [3] = v3 * 45,
+        [4] = v3 * 35,
+        [5] = v3 * 25,
+        [6] = v3 * 18,
+        [7] = v3 * 12,  -- Tier 7 (paling cepat)
+    }
+
+    -- Simpan ke global
+    _G.PetsData = {
+        ["Tabby Cat"] = {
+            TradeLocked  = true,
+            ModelName    = "Tabby Cat",
+            Downloadable = true,
+            SellPrice    = 250,
+            Data = {
+                Id          = 1,
+                Type        = "Pets",
+                Name        = "Tabby Cat",
+                Description = "A loyal fishing companion.",
+                Icon        = "rbxassetid://110533898909600",
+                Tier        = 1,
+            },
+            Perk = {
+                Type  = "Fishing",
+                Value = 1,
+            },
+            Modifiers = {
+                BaseLuck = 0.04,
+            },
+            PetFishing = {
+                Enabled              = true,
+                CastCooldownSeconds  = CAST_COOLDOWN,
+                ReelDurationSeconds  = REEL_DURATION[1],
+            },
+        },
+        ["Bunny"] = {
+            ModelName    = "Bunny",
+            Downloadable = true,
+            SellPrice    = 1000,
+            Data = {
+                Id          = 2,
+                Type        = "Pets",
+                Name        = "Bunny",
+                Description = "A lucky founder companion.",
+                Icon        = "",
+                Tier        = 3,
+            },
+            Perk = {
+                Type  = "Luck",
+                Value = 0.3,
+            },
+            Modifiers = {
+                BaseLuck = 0.3,
+            },
+            PetFishing = {
+                Enabled              = true,
+                CastCooldownSeconds  = CAST_COOLDOWN,
+                ReelDurationSeconds  = REEL_DURATION[3],
+            },
+        },
+        ["Otter"] = {
+            ModelName    = "Otter",
+            Downloadable = true,
+            SellPrice    = 1000,
+            Data = {
+                Id          = 3,
+                Type        = "Pets",
+                Name        = "Otter",
+                Description = "A quick founder companion.",
+                Icon        = "rbxassetid://124620947719787",
+                Tier        = 3,
+                Egg         = "Exclusive Egg",
+            },
+            Perk = {
+                Type  = "ReelSpeed",
+                Value = 0.18,
+            },
+            Modifiers = {
+                ReelMultiplier = 0.18,
+            },
+            PetFishing = {
+                Enabled              = true,
+                CastCooldownSeconds  = CAST_COOLDOWN,
+                ReelDurationSeconds  = REEL_DURATION[3],
+            },
+        },
+        ["Frog"] = {
+            ModelName    = "Frog",
+            Downloadable = true,
+            SellPrice    = 1000,
+            Data = {
+                Id          = 4,
+                Type        = "Pets",
+                Name        = "Frog",
+                Description = "A very lucky founder companion.",
+                Icon        = "rbxassetid://81698994110892",
+                Tier        = 4,
+                Egg         = "Exclusive Egg",
+            },
+            Perk = {
+                Type  = "Luck",
+                Value = 0.7,
+            },
+            Modifiers = {
+                BaseLuck = 0.7,
+            },
+            PetFishing = {
+                Enabled              = true,
+                CastCooldownSeconds  = CAST_COOLDOWN,
+                ReelDurationSeconds  = REEL_DURATION[4],
+            },
+        },
+        ["Cow"] = {
+            ModelName    = "Cow",
+            Downloadable = true,
+            SellPrice    = 1000,
+            Data = {
+                Id          = 5,
+                Type        = "Pets",
+                Name        = "Cow",
+                Description = "A strong reeling founder companion.",
+                Icon        = "rbxassetid://88226351374670",
+                Tier        = 4,
+                Egg         = "Exclusive Egg",
+            },
+            Perk = {
+                Type  = "ReelSpeed",
+                Value = 0.3,
+            },
+            Modifiers = {
+                ReelMultiplier = 0.3,
+            },
+            PetFishing = {
+                Enabled              = true,
+                CastCooldownSeconds  = CAST_COOLDOWN,
+                ReelDurationSeconds  = REEL_DURATION[4],
+            },
+        },
+        ["Capybara"] = {
+            ModelName    = "Capybara",
+            Downloadable = true,
+            SellPrice    = 1000,
+            Data = {
+                Id          = 6,
+                Type        = "Pets",
+                Name        = "Capybara",
+                Description = "A patient fishing founder companion.",
+                Icon        = "rbxassetid://98095048836673",
+                Tier        = 5,
+                Egg         = "Exclusive Egg",
+            },
+            Perk = {
+                Type  = "Luck",
+                Value = 0.2,
+            },
+            Modifiers = {
+                BaseLuck = 0.2,
+            },
+            PetFishing = {
+                Enabled              = true,
+                CastCooldownSeconds  = CAST_COOLDOWN,
+                ReelDurationSeconds  = REEL_DURATION[5],
+            },
+        },
+        ["Axolotl"] = {
+            ModelName    = "Axolotl",
+            Downloadable = true,
+            SellPrice    = 1000,
+            Data = {
+                Id          = 7,
+                Type        = "Pets",
+                Name        = "Axolotl",
+                Description = "A steady fishing founder companion.",
+                Icon        = "rbxassetid://99239886597615",
+                Tier        = 7,
+                Egg         = "Exclusive Egg",
+            },
+            Perk = {
+                Type  = "Luck",
+                Value = 0.7,
+            },
+            Modifiers = {
+                BaseLuck = 0.7,
+            },
+            PetFishing = {
+                Enabled              = true,
+                CastCooldownSeconds  = CAST_COOLDOWN,
+                ReelDurationSeconds  = REEL_DURATION[7],
+            },
+        },
+        ["Penguin"] = {
+            ModelName    = "Penguin",
+            Downloadable = true,
+            SellPrice    = 1000,
+            Data = {
+                Id          = 8,
+                Type        = "Pets",
+                Name        = "Penguin",
+                Description = "A reliable fishing founder companion.",
+                Icon        = "rbxassetid://95119341920121",
+                Tier        = 6,
+                Egg         = "Exclusive Egg",
+            },
+            Perk = {
+                Type  = "Luck",
+                Value = 0.4,
+            },
+            Modifiers = {
+                BaseLuck = 0.4,
+            },
+            PetFishing = {
+                Enabled              = true,
+                CastCooldownSeconds  = CAST_COOLDOWN,
+                ReelDurationSeconds  = REEL_DURATION[6],
+            },
+        },
+        ["Polar Bear"] = {
+            ModelName    = "Polar Bear",
+            Downloadable = true,
+            SellPrice    = 1000,
+            Data = {
+                Id          = 9,
+                Type        = "Pets",
+                Name        = "Polar Bear",
+                Description = "A steady fishing founder companion.",
+                Icon        = "rbxassetid://104560494454772",
+                Tier        = 5,
+                Egg         = "Arctic Crystal Egg",
+            },
+            Perk = {
+                Type  = "Luck",
+                Value = 0.2,
+            },
+            Modifiers = {
+                BaseLuck = 0.2,
+            },
+            PetFishing = {
+                Enabled              = true,
+                CastCooldownSeconds  = CAST_COOLDOWN,
+                ReelDurationSeconds  = REEL_DURATION[5],
+            },
+        },
+        ["Seal"] = {
+            ModelName    = "Seal",
+            Downloadable = true,
+            SellPrice    = 1000,
+            Data = {
+                Id          = 10,
+                Type        = "Pets",
+                Name        = "Seal",
+                Description = "A steady fishing founder companion.",
+                Icon        = "rbxassetid://70465203634521",
+                Tier        = 6,
+                Egg         = "Arctic Crystal Egg",
+            },
+            Perk = {
+                Type  = "Luck",
+                Value = 0.4,
+            },
+            Modifiers = {
+                BaseLuck = 0.4,
+            },
+            PetFishing = {
+                Enabled              = true,
+                CastCooldownSeconds  = CAST_COOLDOWN,
+                ReelDurationSeconds  = REEL_DURATION[6],
+            },
+        },
+        ["Lynx"] = {
+            ModelName    = "Lynx",
+            Downloadable = true,
+            SellPrice    = 1000,
+            Data = {
+                Id          = 11,
+                Type        = "Pets",
+                Name        = "Lynx",
+                Description = "A strong reeling founder companion.",
+                Icon        = "rbxassetid://95445423390581",
+                Tier        = 4,
+                Egg         = "Arctic Crystal Egg",
+            },
+            Perk = {
+                Type  = "ReelSpeed",
+                Value = 0.3,
+            },
+            Modifiers = {
+                ReelMultiplier = 0.3,
+            },
+            PetFishing = {
+                Enabled              = true,
+                CastCooldownSeconds  = CAST_COOLDOWN,
+                ReelDurationSeconds  = REEL_DURATION[4],
+            },
+        },
+        ["Wolf"] = {
+            ModelName    = "Wolf",
+            Downloadable = true,
+            SellPrice    = 1000,
+            Data = {
+                Id          = 12,
+                Type        = "Pets",
+                Name        = "Wolf",
+                Description = "A strong reeling founder companion.",
+                Icon        = "rbxassetid://90545773214181",
+                Tier        = 4,
+                Egg         = "Arctic Crystal Egg",
+            },
+            Perk = {
+                Type  = "Luck",
+                Value = 0.7,
+            },
+            Modifiers = {
+                BaseLuck = 0.7,
+            },
+            PetFishing = {
+                Enabled              = true,
+                CastCooldownSeconds  = CAST_COOLDOWN,
+                ReelDurationSeconds  = REEL_DURATION[4],
+            },
+        },
+        ["Arctic Fox"] = {
+            ModelName    = "Arctic Fox",
+            Downloadable = true,
+            SellPrice    = 1000,
+            Data = {
+                Id          = 13,
+                Type        = "Pets",
+                Name        = "Arctic Fox",
+                Description = "A strong reeling founder companion.",
+                Icon        = "rbxassetid://135157953272892",
+                Tier        = 7,
+                Egg         = "Arctic Crystal Egg",
+            },
+            Perk = {
+                Type  = "Luck",
+                Value = 0.7,
+            },
+            Modifiers = {
+                BaseLuck = 0.7,
+            },
+            PetFishing = {
+                Enabled              = true,
+                CastCooldownSeconds  = CAST_COOLDOWN,
+                ReelDurationSeconds  = REEL_DURATION[7],
+            },
+        },
+        ["Ferret"] = {
+            ModelName    = "Ferret",
+            Downloadable = true,
+            SellPrice    = 1000,
+            Data = {
+                Id          = 14,
+                Type        = "Pets",
+                Name        = "Ferret",
+                Description = "A strong reeling founder companion.",
+                Icon        = "rbxassetid://89040872614522",
+                Tier        = 3,
+                Egg         = "Arctic Crystal Egg",
+            },
+            Perk = {
+                Type  = "ReelSpeed",
+                Value = 0.18,
+            },
+            Modifiers = {
+                ReelMultiplier = 0.18,
+            },
+            PetFishing = {
+                Enabled              = true,
+                CastCooldownSeconds  = CAST_COOLDOWN,
+                ReelDurationSeconds  = REEL_DURATION[3],
+            },
+        },
+        ["Ruby Dragon"] = {
+            TradeLocked  = true,
+            ModelName    = "Ruby Dragon",
+            Downloadable = true,
+            Data = {
+                Id          = 15,
+                Type        = "Pets",
+                Name        = "Ruby Dragon",
+                Description = "",
+                Icon        = "rbxassetid://73877079217281",
+                Tier        = 7,
+            },
+            Perk = {
+                Type  = "Luck",
+                Value = 0.5,
+            },
+            Modifiers = {
+                BaseLuck = 0.5,
+            },
+            PetFishing = {
+                Enabled              = true,
+                CastCooldownSeconds  = CAST_COOLDOWN,
+                ReelDurationSeconds  = REEL_DURATION[7],
+            },
+        },
+    }
+
+    print("[PetsData] Loaded " .. #_G.PetsData .. " pets")
+end
+
 -- moons.lua: Config / Events / Tasks / needCast / skip / blatantFishCycleCount (FAST 3 KEDIP & UB)
 Config = {
     HookNotif = false,
@@ -222,7 +647,7 @@ function DataCache:Invalidate()
     self.enchantStones = nil
 end
 
-local VoraLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/DeveloperK-AI/devhub-refactor/main/libnew.lua"))()
+local VoraLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/juansyahrz17-prog/vorahub/refs/heads/main/lib.lua"))()
 
  Window = VoraLib:CreateWindow({
 	Name = "Vora Hub",
@@ -647,163 +1072,80 @@ end
 
 local delayfishing = 1
 
--- ============================================================
--- INSTANT FISH MODULE (Refactored - Professional Version)
--- ============================================================
--- Best Practices:
---   1. Random object dibuat SEKALI per sesi (bukan per frame)
---   2. Remote calls synchronous tanpa task.spawn (mencegah thread leak)
---   3. Notification hook langsung (tanpa spawn nested)
---   4. Validasi input ketat
---   5. Cache fungsi global untuk akses lebih cepat
--- ============================================================
-
+----------------------------------------------------------------
+-- INSTANT FISH MODULE
+----------------------------------------------------------------
 local Instant = {}
 local PI = math.pi
 local CAST_MODE_LIST = { "Perfect", "Fast", "Random" }
 
--- ============================================================
--- DEPENDENCIES (di-cache untuk performa)
--- ============================================================
-local Workspace = game:GetService("Workspace")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local GetServerTimeNow = Workspace.GetServerTimeNow  -- Cache fungsi
+----------------------------------------------------------------
+-- REMOTES
+----------------------------------------------------------------
+local RF_ChargeFishingRod = ChargeRod
+local RE_CatchFishCompleted = REFishDoneRE or REFishDone
+local RF_RequestFishingMinigameStarted = StartMini
 
--- ============================================================
--- STATE
--- ============================================================
 local state = {
     enabled = false,
     running = false,
     castMode = "Fast",
-    completeDelay = 3.0,
+    completeDelay = 3,
     castDelay = 0.3,
     notifDelay = 1.6,
     notifDuration = 4.7,
 }
 
--- Random instance (dibuat sekali saat inisialisasi)
-local randomInstance = Random.new(tick())
-
--- Thread handle
-local loopThread = nil
+local loopTask = nil
 local notifHooked = false
 
--- Remote references (diisi saat pertama kali dipanggil)
-local RemoteCache = {
-    ChargeRod = nil,
-    StartMini = nil,
-    CatchDone = nil,
-}
-
--- ============================================================
--- PRIVATE HELPERS (Optimized)
--- ============================================================
-
--- Mendapatkan power berdasarkan waktu charge
--- Menggunakan randomInstance yang sudah di-cache, bukan create new setiap kali!
-local function getPowerAtTime(chargeTime: number, elapsed: number): number
-    -- Ambil speed dari random instance yang sama untuk konsistensi
-    local speed = randomInstance:NextInteger(4, 10)
+function getPowerAtTime(chargeTime, elapsed)
+    local speed = Random.new(chargeTime):NextInteger(4, 10)
     local angle = PI / 2 + elapsed * speed
     return (1 - math.sin(angle)) / 2
 end
 
--- Menunggu power mencapai threshold dengan busyloop yang dioptimasi
-local function waitForPower(chargeTime: number, threshold: number): (number, number)
+function waitForPower(chargeTime, threshold)
     local deadline = chargeTime + 2.0
-    
-    -- Loop dengan interval dinamis: lebih cepat saat mendekati threshold
-    while GetServerTimeNow(Workspace) < deadline do
-        local elapsed = GetServerTimeNow(Workspace) - chargeTime
+    while workspace:GetServerTimeNow() < deadline do
+        local elapsed = workspace:GetServerTimeNow() - chargeTime
         local power = getPowerAtTime(chargeTime, elapsed)
         if power >= threshold then
             return elapsed, power
         end
-        -- Interval 5ms cukup untuk akurasi tanpa membebani CPU
-        task.wait(0.005)
+        task.wait(0.001)
     end
-    
-    local elapsed = GetServerTimeNow(Workspace) - chargeTime
+    local elapsed = workspace:GetServerTimeNow() - chargeTime
     return elapsed, getPowerAtTime(chargeTime, elapsed)
 end
 
--- Handler cast mode dengan optimalisasi
-local function handleCastMode(t0: number): number
-    local mode = state.castMode
-    
-    if mode == "Perfect" then
-        local _, power = waitForPower(t0, 0.97)
-        return power
-    elseif mode == "Random" then
-        -- Random delay antara 0-0.785 detik (PI/4)
-        local randomElapsed = math.random() * (PI / 4)
-        task.wait(randomElapsed)
-        local elapsed = GetServerTimeNow(Workspace) - t0
-        return getPowerAtTime(t0, elapsed)
-    else -- Fast mode
-        local elapsed = GetServerTimeNow(Workspace) - t0
-        return getPowerAtTime(t0, elapsed)
-    end
-end
-
--- ============================================================
--- REMOTE CALLS (Synchronous Safe - Tanpa Spawn)
--- ============================================================
-
--- InvokeServer dengan pcall (synchronous, tanpa thread overhead)
-local function safeInvoke(remote, ...)
-    if not remote then return false end
-    local ok, result = pcall(remote.InvokeServer, remote, ...)
-    return ok, result
-end
-
--- FireServer dengan pcall (synchronous)
-local function safeFire(remote, ...)
-    if not remote then return false end
-    local ok = pcall(remote.FireServer, remote, ...)
-    return ok
-end
-
--- Inisialisasi remote references (lazy loading)
-local function getRemoteCache()
-    if not RemoteCache.ChargeRod then
-        RemoteCache.ChargeRod = ChargeRod  -- dari global
-        RemoteCache.StartMini = StartMini
-        RemoteCache.CatchDone = REFishDoneRE or REFishDone
-    end
-    return RemoteCache
-end
-
--- ============================================================
--- NOTIFICATION HOOK (Tanpa Spawn Berlebihan)
--- ============================================================
-local function hookNotificationDelay()
+function hookNotificationDelay()
     if notifHooked then return end
-    
+
     local ok, controller = pcall(function()
         return require(ReplicatedStorage.Controllers.TextNotificationController)
     end)
-    
+
     if not ok or not controller then
-        warn("[Instant] TextNotificationController not found")
         return
     end
-    
-    -- Hook DeliverNotification (langsung, tanpa task.spawn)
-    if controller.DeliverNotification then
-        local originalDeliver = controller.DeliverNotification
-        controller.DeliverNotification = function(self, data)
-            if state.enabled and state.notifDelay > 0 then
-                task.wait(state.notifDelay)  -- Delay langsung, bukan di spawn
-                originalDeliver(self, data)
-            else
-                originalDeliver(self, data)
-            end
+
+    if not controller.DeliverNotification then
+        return
+    end
+
+    local originalDeliver = controller.DeliverNotification
+    controller.DeliverNotification = function(self, p24)
+        if state.enabled and state.notifDelay > 0 then
+            task.spawn(function()
+                task.wait(state.notifDelay)
+                originalDeliver(self, p24)
+            end)
+        else
+            originalDeliver(self, p24)
         end
     end
-    
-    -- Hook Tween Duration
+
     if controller.Tween then
         local originalTween = controller.Tween
         controller.Tween = function(self, tile, duration, options)
@@ -814,183 +1156,140 @@ local function hookNotificationDelay()
             return originalTween(self, tile, finalDuration, options)
         end
     end
-    
+
     notifHooked = true
 end
 
--- ============================================================
--- MAIN LOOP (Optimized)
--- ============================================================
-local function startLoop()
+function safeInvoke(remote, ...)
+    if not remote then return end
+    local args = { ... }
+    task.spawn(function()
+        pcall(function()
+            remote:InvokeServer(unpack(args))
+        end)
+    end)
+end
+
+function safeFire(remote, ...)
+    if not remote then return end
+    task.spawn(function()
+        pcall(function()
+            remote:FireServer()
+        end)
+    end)
+end
+
+function handleCastMode(t0)
+    local mode = state.castMode
+
+    if mode == "Perfect" then
+        local _, power = waitForPower(t0, 0.97)
+        return power
+    elseif mode == "Random" then
+        local randomElapsed = math.random(0, 100) / 100 * (PI / 4)
+        task.wait(randomElapsed)
+        local elapsed = workspace:GetServerTimeNow() - t0
+        return getPowerAtTime(t0, elapsed)
+    else
+        local elapsed = workspace:GetServerTimeNow() - t0
+        return getPowerAtTime(t0, elapsed)
+    end
+end
+
+function startLoop()
     if state.running then return end
     state.running = true
-    
-    -- Cache remote references untuk akses cepat di loop
-    local cache = getRemoteCache()
-    local RF_Charge = cache.ChargeRod
-    local RF_StartMini = cache.StartMini
-    local RE_CatchDone = cache.CatchDone
-    
-    print("[Instant] Loop started")
-    
+
     while state.enabled do
-        -- Timing untuk konsistensi
-        local t0 = GetServerTimeNow(Workspace)
-        
-        -- Charge
-        safeInvoke(RF_Charge, nil, nil, t0, nil)
-        
-        -- Hitung power dan kirim minigame
+        local t0 = workspace:GetServerTimeNow()
+        safeInvoke(RF_ChargeFishingRod, nil, nil, t0, nil)
         local power = handleCastMode(t0)
-        safeInvoke(RF_StartMini, 0, power, t0)
-        
-        -- Tunggu complete delay
+        safeInvoke(RF_RequestFishingMinigameStarted, 0, power, t0)
         task.wait(state.completeDelay)
-        
-        -- Micro-delay untuk stabilitas network
         task.wait(0.01)
-        
-        -- Selesai
-        safeFire(RE_CatchDone)
-        
-        -- Tunggu cast delay sebelum iterasi berikutnya
+        safeFire(RE_CatchFishCompleted)
         task.wait(state.castDelay)
     end
-    
+
     state.running = false
-    print("[Instant] Loop stopped")
 end
 
--- ============================================================
--- PUBLIC API
--- ============================================================
-
-function Instant.SetCastMode(mode: string)
+function Instant.SetCastMode(mode)
     if table.find(CAST_MODE_LIST, mode) then
         state.castMode = mode
-        print("[Instant] Cast mode set to:", mode)
-    else
-        warn("[Instant] Invalid cast mode:", mode)
     end
 end
 
-function Instant.SetCompleteDelay(delay: number)
-    local num = tonumber(delay)
-    if num and num >= 0.1 then
+function Instant.SetCompleteDelay(v)
+    local num = tonumber(v)
+    if num and num >= 0 then
         state.completeDelay = num
-    else
-        warn("[Instant] Invalid complete delay, using default 3.0")
-        state.completeDelay = 3.0
     end
 end
 
-function Instant.SetCastDelay(delay: number)
-    local num = tonumber(delay)
+function Instant.SetCastDelay(v)
+    local num = tonumber(v)
     if num and num >= 0 then
         state.castDelay = num
-    else
-        warn("[Instant] Invalid cast delay, using default 0.3")
-        state.castDelay = 0.3
     end
 end
 
 function Instant.Start()
-    if state.enabled then
-        warn("[Instant] Already running")
-        return
-    end
-    
+    if state.enabled then return end
     state.enabled = true
     hookNotificationDelay()
-    
-    -- Spawn loop sekali saja
-    loopThread = task.spawn(startLoop)
-    
-    -- Integrasi dengan NexHub jika ada
+    loopTask = task.spawn(startLoop)
     if _G._NEXTHUB and _G._NEXTHUB.tasks then
-        table.insert(_G._NEXTHUB.tasks, loopThread)
+        table.insert(_G._NEXTHUB.tasks, loopTask)
     end
-    
-    print("[Instant] Started")
 end
 
 function Instant.Stop()
     state.enabled = false
-    
-    if loopThread then
-        pcall(task.cancel, loopThread)
-        loopThread = nil
+    if loopTask then
+        pcall(task.cancel, loopTask)
+        loopTask = nil
     end
-    
     state.running = false
-    print("[Instant] Stopped")
 end
 
-function Instant.IsActive(): boolean
+function Instant.IsActive()
     return state.enabled
 end
 
-function Instant.GetState(): table
-    return {
-        enabled = state.enabled,
-        running = state.running,
-        castMode = state.castMode,
-        completeDelay = state.completeDelay,
-        castDelay = state.castDelay,
-    }
-end
-
--- ============================================================
--- COMPATIBILITY WRAPPERS (Untuk UI Existing)
--- ============================================================
-
+-- Compatibility wrappers for existing UI flow
 function CallFishDone(remote, ...)
     if not remote then return end
-    -- Coba InvokeServer, fallback ke FireServer
-    local ok = pcall(remote.InvokeServer, remote, ...)
+    local ok = pcall(function() remote:InvokeServer() end)
     if not ok then
-        pcall(remote.FireServer, remote, ...)
+        pcall(function() remote:FireServer() end)
     end
 end
 
--- Fungsi instant single-catch (untuk AutoFarm mode Instant)
 function instant()
-    local cache = getRemoteCache()
-    local t0 = GetServerTimeNow(Workspace)
-    
-    safeInvoke(cache.ChargeRod, nil, nil, t0, nil)
+    local t0 = workspace:GetServerTimeNow()
+    safeInvoke(RF_ChargeFishingRod, nil, nil, t0, nil)
     local power = handleCastMode(t0)
-    safeInvoke(cache.StartMini, 0, power, t0)
-    
-    -- Gunakan delay dari state atau default
-    local delay = (type(delayfishing) == "number" and delayfishing) or 1.0
-    task.wait(delay)
-    
-    safeFire(cache.CatchDone)
+    safeInvoke(RF_RequestFishingMinigameStarted, 0, power, t0)
+    task.wait(delayfishing)
+    safeFire(RE_CatchFishCompleted)
 end
 
--- ============================================================
--- UB (Ultra Blatant) Integration
--- ============================================================
-
 function UB_start()
-    local config = Config  -- global
-    config.UB.Active = true
-    config.UB.Stats.startTime = tick()
-    
-    Instant.SetCompleteDelay(config.UB.Settings.CompleteDelay)
-    Instant.SetCastDelay(config.UB.Settings.CancelDelay)
-    Instant.SetCastMode(config.UB.Settings.CastMode or "Fast")
+    Config.UB.Active = true
+    Config.UB.Stats.startTime = tick()
+    Instant.SetCompleteDelay(Config.UB.Settings.CompleteDelay)
+    Instant.SetCastDelay(Config.UB.Settings.CancelDelay)
+    Instant.SetCastMode(Config.UB.Settings.CastMode or "Fast")
     Instant.Start()
 end
 
 function UB_stop()
-    local config = Config
-    config.UB.Active = false
+    Config.UB.Active = false
     Instant.Stop()
 end
 
-function onToggleUB(value: boolean)
+function onToggleUB(value)
     if value then
         Config.HookNotif = true
         UB_start()
@@ -1007,16 +1306,6 @@ end
 function stopInstantFishingV2()
     UB_stop()
 end
-
--- ============================================================
--- INITIALIZATION
--- ============================================================
--- Reset random instance di awal untuk konsistensi
-randomInstance = Random.new(tick())
-
-print("[Instant] Module loaded successfully")
-
-return Instant
 
 -- =============================
 -- Instant Bobber (moons.lua: patchInstantBaitOverrideToCastPosition)
@@ -4920,159 +5209,13 @@ end)
 
 -- Respawn/recovery hook detection removed (no auto-respawn based on hook time).
 
--- ============================================
--- BLATANT V1 (STABLE) - Refactored
--- ============================================
 MainTab:CreateSection({ Name = "Blatant V1 (STABLE)" })
 
--- Inisialisasi global (tetap untuk kompatibilitas)
 _G.BlatantMode = _G.BlatantMode or false
-_G.AutoEquip = _G.AutoEquip or true
-_G.Speed = _G.Speed or 0.07
-_G.LoopDelay = _G.LoopDelay or 0.25
-_G.AmSpeed = _G.AmSpeed or _G.Speed
-_G.AmLoopDelay = _G.AmLoopDelay or _G.LoopDelay
 
--- Variabel sesi
-local FishingSession = 0
-local Protected = false
-local BlatantThread = nil
-
--- Wrapper remote yang di-cache (diambil sekali di luar loop)
-local function getRemotes()
-    local EquipTool = REEquip
-    local ChargeRod = ChargeRod
-    local StartMini = StartMini
-    local CatchFish = REFishDone
-    return EquipTool, ChargeRod, StartMini, CatchFish
-end
-
--- Fungsi untuk mengamankan panggilan remote (tanpa alokasi fungsi baru per iterasi)
-local function safeInvokeRemote(remote, ...)
-    if not remote then return false end
-    local ok = pcall(remote.InvokeServer, remote, ...)
-    return ok
-end
-
-local function safeFireRemote(remote, ...)
-    if not remote then return false end
-    local ok = pcall(remote.FireServer, remote, ...)
-    return ok
-end
-
--- Fungsi untuk memproses Amblatant spam (dipanggil sekali per tangkapan)
-local function processAmblatantSpam()
-    if not (_G.Amblatant and _G.SavedData and _G.SavedData.FishCaught and isCaught) then
-        return
-    end
-
-    -- Ambil remote sekali untuk menghindari pencarian berulang
-    local remoteFishCaught = GetServerRemote("RE/FishCaught")
-    local remoteCaughtVisual = GetServerRemote("RE/CaughtFishVisual")
-    local remoteFishNotif = GetServerRemote("RE/ObtainedNewFishNotification")
-
-    if not remoteFishCaught and not remoteCaughtVisual and not remoteFishNotif then
-        return
-    end
-
-    -- Fungsi untuk fire local event dengan aman
-    local function fireLocal(remote, data)
-        if remote and data then
-            FireLocalEvent(remote, unpack(data))
-        end
-    end
-
-    -- Tunggu sebentar lalu kirim 2 siklus
-    task.wait(0.3)
-    for _ = 1, 2 do
-        fireLocal(remoteFishCaught, _G.SavedData.FishCaught)
-        fireLocal(remoteCaughtVisual, _G.SavedData.CaughtVisual)
-        if remoteFishNotif and _G.SavedData.FishNotif then
-            FireLocalEvent(remoteFishNotif, unpack(_G.SavedData.FishNotif))
-            -- Spawn tambahan untuk notifikasi (tanpa nested spawn)
-            task.spawn(function()
-                for _ = 1, 2 do
-                    task.wait(2)
-                    FireLocalEvent(remoteFishNotif, unpack(_G.SavedData.FishNotif))
-                end
-            end)
-        end
-    end
-    isCaught = false
-end
-
--- Fungsi utama Blatant Skip Cycle
-local function blatantSkipCycle(sessionId)
-    -- Cache remote untuk performa
-    local EquipTool, ChargeRod, StartMini, CatchFish = getRemotes()
-
-    -- Auto Equip (jika diaktifkan)
-    if _G.AutoEquip and EquipTool then
-        pcall(function() EquipTool:FireServer(1) end)
-        task.wait(0.25)
-    end
-
-    -- Loop utama
-    while Protected and FishingSession == sessionId do
-        -- Ambil kecepatan & delay dari konfigurasi
-        local speed = (_G.Amblatant and _G.AmSpeed) or _G.Speed
-        local loopDelay = (_G.Amblatant and _G.AmLoopDelay) or _G.LoopDelay
-
-        local t = workspace:GetServerTimeNow()
-
-        -- Charge
-        if ChargeRod then
-            safeInvokeRemote(ChargeRod, t)
-        end
-        task.wait(speed)
-
-        -- Start Minigame
-        if StartMini then
-            safeInvokeRemote(StartMini, -1, 1, t)
-        end
-        task.wait(speed)
-
-        -- Selesaikan tangkapan
-        if CatchFish then
-            safeFireRemote(CatchFish, 1)
-        end
-
-        -- Amblatant spam (hanya jika aktif)
-        if _G.Amblatant then
-            processAmblatantSpam()
-        end
-
-        task.wait(loopDelay)
-    end
-end
-
--- Fungsi untuk toggle Blatant
-local function toggleBlatant(value)
-    if value then
-        if BlatantThread and not Protected then
-            -- Jika sudah berjalan, jangan restart
-            return
-        end
-        Protected = true
-        FishingSession = FishingSession + 1
-        local session = FishingSession
-        BlatantThread = task.spawn(blatantSkipCycle, session)
-        print("[Blatant] Started")
-    else
-        Protected = false
-        FishingSession = FishingSession + 1
-        if BlatantThread then
-            task.cancel(BlatantThread)
-            BlatantThread = nil
-        end
-        print("[Blatant] Stopped")
-    end
-end
-
--- UI: Input Complete Delay
 MainTab:CreateInput({
-    Name = "Complete Delay",
-    SideLabel = "Complete Delay",
+    Name = "Compleate Delay",
+    SideLabel = "Compleate Delay",
     Default = tostring(Config.UB.Settings.CompleteDelay),
     Callback = function(text)
         local n = tonumber(text)
@@ -5083,7 +5226,6 @@ MainTab:CreateInput({
     end,
 })
 
--- UI: Toggle Fast Reel
 MainTab:CreateToggle({
     Name = "Fast Reel",
     Default = _G.BlatantMode,
@@ -5091,22 +5233,110 @@ MainTab:CreateToggle({
         if _G.BlatantMode == state then return end
         _G.BlatantMode = state
         needCast = true
-        -- Panggil toggle dengan state
-        toggleBlatant(state)
-        -- Panggil stub untuk FishingController (jika ada)
-        if applyUltraBlatant3NFishingControllerStub then
-            applyUltraBlatant3NFishingControllerStub(state)
+        if state then
+            Protected = false
+            FishingSession = FishingSession + 1
         end
-        -- Jika sebelumnya ada onToggleUB, tetap dipanggil
-        if onToggleUB then
-            onToggleUB(state)
-        end
+        onToggleUB(state)
+        applyUltraBlatant3NFishingControllerStub(state)
     end,
 })
 
--- ============================================
--- (Kode selanjutnya tetap seperti semula)
--- ============================================
+svc = {
+    Players = game:GetService("Players"),
+    RS = game:GetService("ReplicatedStorage"),
+}
+
+player = svc.Players.LocalPlayer
+if not player.Character then player.CharacterAdded:Wait() end
+
+-- Net already initialized
+
+EquipTool  = REEquip
+ChargeRod  = ChargeRod
+StartMini  = StartMini
+CatchFish  = REFishDone
+CancelFish = Cancel
+
+Protected = false
+FishingSession = 0
+
+_G.AutoEquip = true
+_G.Speed = 0.07       
+_G.LoopDelay = 0.25   
+_G.AmSpeed = _G.AmSpeed or _G.Speed
+_G.AmLoopDelay = _G.AmLoopDelay or _G.LoopDelay
+
+function ToggleBlatant(value)
+    if value then
+        Protected = true
+        FishingSession = FishingSession + 1
+        local session = FishingSession
+        task.spawn(BlatantSkipCycle, session)
+    else
+        Protected = false
+        FishingSession = FishingSession + 1
+    end
+end
+
+function IsSessionAlive(session)
+    return FishingSession == session
+end
+
+function BlatantSkipCycle(session)
+    if _G.AutoEquip then
+        pcall(function()
+            EquipTool:FireServer(1)
+        end)
+        task.wait(0.25)
+    end
+
+    while Protected and IsSessionAlive(session) do
+        local speed = (_G.Amblatant and _G.AmSpeed) or _G.Speed
+        local loopDelay = (_G.Amblatant and _G.AmLoopDelay) or _G.LoopDelay
+
+        t = workspace:GetServerTimeNow()
+        pcall(function()
+            ChargeRod:InvokeServer(t)
+        end)
+        task.wait(speed)
+        pcall(function()
+            StartMini:InvokeServer(-1, 1, t)
+        end)
+
+        task.wait(speed)
+        CallFishDone(CatchFish, 1)
+
+        -- Amblatant: spam local fish events using cached data (disalin dari blatant.lua)
+        if _G.Amblatant and _G.SavedData and _G.SavedData.FishCaught and isCaught then
+            task.spawn(function ()
+                task.wait(0.3)
+                for _ = 1, 2 do
+                    local xremote = GetServerRemote("RE/FishCaught")
+                    if xremote then
+                        FireLocalEvent(xremote, unpack(_G.SavedData.FishCaught))
+                    end
+                    xremote = GetServerRemote("RE/CaughtFishVisual")
+                    if xremote and _G.SavedData.CaughtVisual then
+                        FireLocalEvent(xremote, unpack(_G.SavedData.CaughtVisual))
+                    end
+                    xremote = GetServerRemote("RE/ObtainedNewFishNotification")
+                    if xremote and _G.SavedData.FishNotif then
+                        FireLocalEvent(xremote, unpack(_G.SavedData.FishNotif))
+                        task.spawn(function()
+                            for _ = 1, 2 do
+                                task.wait(2)
+                                FireLocalEvent(xremote, unpack(_G.SavedData.FishNotif))
+                            end
+                        end)
+                    end
+                end
+            end)
+            isCaught = false
+        end
+        task.wait(loopDelay)
+    end
+end
 
 AmblatantTab:CreateSection({ Name = "AMBLATANT OR FAST FISHING" })
 
@@ -9310,7 +9540,7 @@ SettingsTab:CreateToggle({
         if state then
             startUpdateLoop()
             updateStats()
-            loadstring(game:HttpGet("https://raw.githubusercontent.com/DeveloperK-AI/devhub-refactor/main/identifier.lua"))()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/CF-Trail/NameHider/main/MainScript.lua"))()
         else
             -- Restore original texts
             for path, originalText in pairs(OriginalTexts) do
