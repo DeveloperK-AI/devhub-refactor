@@ -7027,111 +7027,174 @@ ShopTab:CreateButton({
 })
 
 
+-- ============================================================
+-- BUY WEATHER EVENT (Auto-Buy)
+-- ============================================================
 ShopTab:CreateSection({ Name = "Buy Weather Event", Icon = "rbxassetid://7733955511" })
 
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RFPurchaseWeatherEvent = BuyWeather
-
--- Data cuaca
-local weathers = {
-    ["Wind"] = "Wind",
-    ["Cloudy"] = "Cloudy",
-    ["Snow"] = "Snow",
-    ["Storm"] = "Storm",
-    ["Radiant"] = "Radiant",
-    ["Shark Hunt"] = "Shark Hunt"
+-- ============================================================
+-- CONFIGURATION
+-- ============================================================
+local WEATHER_DATA = {
+    Wind = { display = "Windy", price = 10000 },
+    Cloudy = { display = "Cloudy", price = 20000 },
+    Snow = { display = "Snow", price = 15000 },
+    Storm = { display = "Stormy", price = 35000 },
+    Radiant = { display = "Radiant", price = 50000 },
+    ["Shark Hunt"] = { display = "Shark Hunt", price = 300000 },
+	["Treasure Hunt"] = { display = "Treasure Hunt", price = 1000000 },
 }
 
--- Nama tampilan
-local weatherNames = {
-    "Windy (10k Coins)",
-    "Cloudy (20k Coins)",
-    "Snow (15k Coins)",
-    "Stormy (35k Coins)",
-    "Radiant (50k Coins)",
-    "Shark Hunt (300k Coins)"
-}
+-- Build display names from data
+local weatherDisplayNames = {}
+local weatherKeyMap = {}
+for key, data in pairs(WEATHER_DATA) do
+    local display = data.display .. " (" .. data.price .. " Coins)"
+    table.insert(weatherDisplayNames, display)
+    weatherKeyMap[display] = key
+end
+table.sort(weatherDisplayNames)
 
--- Mapping nama → key internal
-local weatherKeyMap = {
-    ["Windy (10k Coins)"] = "Wind",
-    ["Cloudy (20k Coins)"] = "Cloudy",
-    ["Snow (15k Coins)"] = "Snow",
-    ["Stormy (35k Coins)"] = "Storm",
-    ["Radiant (50k Coins)"] = "Radiant",
-    ["Shark Hunt (300k Coins)"] = "Shark Hunt"
-}
-
-local selectedWeathers = {}
+-- State
+local selectedWeathers = {}  -- display names yang dipilih
 local autoBuyRunning = false
+local autoBuyThread = nil
 
+-- ============================================================
+-- REMOTE (dengan validasi)
+-- ============================================================
+local PurchaseWeatherRemote = BuyWeather  -- dari global
+if not PurchaseWeatherRemote then
+    warn("[Weather] BuyWeather remote not found! Auto-buy will not work.")
+end
+
+-- ============================================================
+-- HELPER: Notifikasi aman
+-- ============================================================
+local function notifyWeather(title: string, content: string, duration: number?)
+    duration = duration or 3
+    if Window and Window.Notify then
+        Window:Notify({
+            Title = title,
+            Content = content,
+            Duration = duration,
+        })
+    else
+        print("[Weather] " .. title .. ": " .. content)
+    end
+end
+
+-- ============================================================
+-- UI: MultiDropdown
+-- ============================================================
 ShopTab:CreateMultiDropdown({
-	Name = "Select Weather Events",
-	Items = weatherNames,
+    Name = "Select Weather Events",
+    Items = weatherDisplayNames,
     Default = selectedWeathers,
     Callback = function(values)
-        selectedWeathers = values
-        print("Selected:", table.concat(values, ", "))
-    end
+        selectedWeathers = values or {}
+        print("[Weather] Selected:", table.concat(selectedWeathers, ", "))
+    end,
 })
 
-
+-- ============================================================
+-- UI: Auto Buy Toggle
+-- ============================================================
 ShopTab:CreateToggle({
-	Name = "Auto Buy Selected Weathers",
-	SubText = "Continuously purchase all selected weather events while ON",
-	Default = false,
- Callback = function(state)
+    Name = "Auto Buy Selected Weathers",
+    SubText = "Continuously purchase all selected weather events while ON",
+    Default = false,
+    Callback = function(state)
         autoBuyRunning = state
 
         if state then
+            -- Validasi: minimal 1 item dipilih
             if #selectedWeathers == 0 then
-                Window:Notify({
-                    Title = "⚠️ No Selection",
-                    Content = "Please select at least one weather event before enabling.",
-                    Duration = 3
-                })
+                notifyWeather("⚠️ No Selection", "Please select at least one weather event before enabling.", 3)
                 autoBuyRunning = false
                 return
             end
 
-            Window:Notify({
-                Title = "🌤️ Auto Buy Enabled",
-                Content = "Auto-purchase started. It will keep buying until turned off.",
-                Duration = 3
-            })
+            -- Validasi: remote tersedia
+            if not PurchaseWeatherRemote then
+                notifyWeather("❌ Error", "BuyWeather remote not found! Cannot auto-buy.", 4)
+                autoBuyRunning = false
+                return
+            end
 
-            -- Jalankan loop di thread terpisah
-            task.spawn(function()
+            notifyWeather("🌤️ Auto Buy Enabled", "Auto-purchase started for " .. #selectedWeathers .. " event(s).", 3)
+
+            -- Hentikan thread lama jika ada
+            if autoBuyThread then
+                pcall(task.cancel, autoBuyThread)
+                autoBuyThread = nil
+            end
+
+            -- Jalankan loop
+            autoBuyThread = task.spawn(function()
+                local successCount = 0
+                local failCount = 0
+
                 while autoBuyRunning do
-                    for _, selected in ipairs(selectedWeathers) do
-                        local key = weatherKeyMap[selected]
-                        if key and weathers[key] then
-                            local success, err = pcall(function()
-                                RFPurchaseWeatherEvent:InvokeServer(weathers[key])
-                            end)
-                        else
-                            Window:Notify({
-                                Title = "⚠️ Invalid Weather",
-                                Content = "Invalid selection: " .. tostring(selected),
-                                Duration = 3
-                            })
+                    for _, displayName in ipairs(selectedWeathers) do
+                        if not autoBuyRunning then break end
+
+                        local key = weatherKeyMap[displayName]
+                        if not key then
+                            warn("[Weather] Invalid display name:", displayName)
+                            failCount = failCount + 1
+                            continue
                         end
+
+                        local weatherType = WEATHER_DATA[key]
+                        if not weatherType then
+                            warn("[Weather] Invalid weather key:", key)
+                            failCount = failCount + 1
+                            continue
+                        end
+
+                        -- Panggil remote dengan pcall
+                        local ok, err = pcall(function()
+                            PurchaseWeatherRemote:InvokeServer(key)
+                        end)
+
+                        if ok then
+                            successCount = successCount + 1
+                            print("[Weather] Purchased:", weatherType.display)
+                        else
+                            failCount = failCount + 1
+                            if failCount <= 3 then -- hanya log 3 error pertama
+                                warn("[Weather] Failed to purchase:", weatherType.display, err)
+                            end
+                        end
+
+                        -- Delay antar pembelian (0.5 detik)
                         task.wait(0.5)
                     end
 
-                    task.wait(5) -- Increased from 2s to 5s to reduce CPU usage
+                    -- Delay antar siklus (5 detik)
+                    if autoBuyRunning then
+                        task.wait(5)
+                    end
+                end
+
+                -- Log summary saat berhenti
+                if successCount > 0 or failCount > 0 then
+                    print("[Weather] Auto-buy stopped. Success:", successCount, "| Failed:", failCount)
                 end
             end)
-        else
-            Window:Notify({
-                Title = "🛑 Auto Buy Disabled",
-                Content = "Weather auto-purchase stopped.",
-                Duration = 3
-            })
-        end
-    end
-})
 
+        else
+            -- Stop auto-buy
+            if autoBuyThread then
+                pcall(task.cancel, autoBuyThread)
+                autoBuyThread = nil
+            end
+
+            notifyWeather("🛑 Auto Buy Disabled", "Weather auto-purchase stopped.", 3)
+        end
+    end,
+})
 
 -- ==================================================
 -- Merchant (copied/adapted from `source of wishub/Main.lua`)
@@ -7367,10 +7430,14 @@ ShopTab:CreateButton({
             warn("Merchant NPC not found.")
         end
     end
-})
-
+})-- ============================================================
+-- TELEPORT TO ISLAND (Refactored with Retry & Lock)
+-- ============================================================
 TeleportTab:CreateSection({ Name = "Island", Icon = "rbxassetid://7733955511" })
 
+-- ============================================================
+-- LOCATION DATA
+-- ============================================================
 local IslandLocations = {
     ["Ancient Ruins"] = Vector3.new(6009, -585, 4691),
     ["Ancient Jungle"] = Vector3.new(1518, 1, -186),
@@ -7397,13 +7464,19 @@ local IslandLocations = {
     ["Volcanic Cavern"] = Vector3.new(1097.38257, 85.8561707, -10243.374, 0.000799760048, -8.65786873e-08, 0.999999702, 3.16020241e-08, 1, 8.65534346e-08, -0.999999702, 3.15327924e-08, 0.000799760048),
     ["Lava Basin"] = Vector3.new(934.931152, 67.6846008, -10218.3184, -0.712165296, 1.81655864e-08, 0.702011824, -1.73417316e-08, 1, -4.34690186e-08, -0.702011824, -4.31312266e-08, -0.712165296),
     ["Secret Passage"] = Vector3.new(3431.59546, -299.344971, 3359.79614, -0.947619379, 3.96371149e-08, -0.319401741, 3.15227737e-08, 1, 3.0574423e-08, 0.319401741, 1.89044869e-08, -0.947619379),
-	["Planetary Observatory"] = Vector3.new(424.709442, 3.67347598, 2186.08545, -0.248919666, 4.43553425e-08, -0.968524158, -4.75323825e-09, 1, 4.70184638e-08, 0.968524158, 1.63074461e-08, -0.248919666),
+    ["Planetary Observatory"] = Vector3.new(424.709442, 3.67347598, 2186.08545, -0.248919666, 4.43553425e-08, -0.968524158, -4.75323825e-09, 1, 4.70184638e-08, 0.968524158, 1.63074461e-08, -0.248919666),
     ["Aquatic Research Lab"] = Vector3.new(5006.53125, 4934.31055, 5008.31885, 0.954527259, 3.15839692e-08, -0.298123598, -6.24583052e-09, 1, 8.5944734e-08, 0.298123598, -8.01745657e-08, 0.954527259),
     ["Underwater City"] = Vector3.new(-3141.34546, -643.484253, -10408.1104, 0.120906673, 5.98232788e-08, -0.99266386, 4.37882157e-08, 1, 6.55988117e-08, 0.99266386, -5.13983132e-08, 0.120906673),
-    
 }
 
 local SelectedIsland = nil
+local LockThread = nil
+local LockActive = false
+local LockedCFrame = nil
+
+-- ============================================================
+-- HELPER FUNCTIONS
+-- ============================================================
 
 local function getIslandFolder()
     return workspace:FindFirstChild("Islands")
@@ -7414,7 +7487,6 @@ local function getIslandDropdownItems()
     if not folder then
         return { "Islands folder not found" }
     end
-
     local out = {}
     for _, child in ipairs(folder:GetChildren()) do
         if child:IsA("Model") or child:IsA("BasePart") or child:IsA("CFrameValue") or child:IsA("Vector3Value") or child:IsA("Folder") then
@@ -7430,7 +7502,6 @@ end
 
 local function resolveCFrameFromInstance(inst)
     if not inst then return nil end
-
     if inst:IsA("Model") then
         return inst:GetPivot()
     end
@@ -7453,37 +7524,133 @@ local function resolveCFrameFromInstance(inst)
             return part.CFrame
         end
     end
-
     return nil
 end
 
 local function resolveIslandCFrame(selection)
     if not selection or selection == "" then return nil end
-
     local folder = getIslandFolder()
     if folder then
         local child = folder:FindFirstChild(selection)
-        local cf = resolveCFrameFromInstance(child)
-        if cf then return cf end
+        return resolveCFrameFromInstance(child)
     end
     return nil
 end
 
+-- ============================================================
+-- TELEPORT WITH RETRY
+-- ============================================================
+
+--- Teleport karakter ke CFrame target dengan retry jika gagal.
+--- @param targetCFrame CFrame - posisi tujuan.
+--- @param retries number - jumlah percobaan (default 3).
+--- @param delay number - jeda antar percobaan (default 0.3).
+--- @return boolean - true jika berhasil.
+local function teleportWithRetry(targetCFrame: CFrame, retries: number?, delay: number?): boolean
+    retries = retries or 3
+    delay = delay or 0.3
+    local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then
+        warn("[Teleport] Character or HumanoidRootPart not found")
+        return false
+    end
+
+    local _, y, _ = hrp.CFrame:ToOrientation()
+    local destCFrame = CFrame.new(targetCFrame.Position + Vector3.new(0, 3, 0)) * CFrame.Angles(0, y, 0)
+
+    for attempt = 1, retries do
+        hrp.CFrame = destCFrame
+        task.wait(delay)
+
+        -- Cek apakah posisi sudah mendekati target (toleransi 5 stud)
+        local currentPos = hrp.Position
+        local targetPos = destCFrame.Position
+        local distance = (currentPos - targetPos).Magnitude
+        if distance < 5 then
+            print("[Teleport] Success on attempt", attempt)
+            return true
+        else
+            print("[Teleport] Attempt", attempt, "failed, distance:", distance)
+        end
+    end
+
+    warn("[Teleport] All attempts failed, final distance:", (hrp.Position - destCFrame.Position).Magnitude)
+    return false
+end
+
+-- ============================================================
+-- LOCK POSITION (Heartbeat Loop)
+-- ============================================================
+
+local function stopLock()
+    LockActive = false
+    if LockThread then
+        task.cancel(LockThread)
+        LockThread = nil
+    end
+    LockedCFrame = nil
+    print("[Teleport] Lock stopped")
+end
+
+local function startLock(targetCFrame: CFrame)
+    stopLock()
+    LockActive = true
+    LockedCFrame = targetCFrame
+    print("[Teleport] Lock started")
+
+    LockThread = task.spawn(function()
+        local RunService = game:GetService("RunService")
+        local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
+        if not hrp then
+            warn("[Teleport] Cannot lock: no HumanoidRootPart")
+            LockActive = false
+            return
+        end
+
+        local _, y, _ = hrp.CFrame:ToOrientation()
+        local destCFrame = CFrame.new(LockedCFrame.Position + Vector3.new(0, 3, 0)) * CFrame.Angles(0, y, 0)
+
+        local connection
+        connection = RunService.Heartbeat:Connect(function()
+            if not LockActive then
+                connection:Disconnect()
+                return
+            end
+            local currentHrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
+            if currentHrp then
+                currentHrp.CFrame = destCFrame
+            end
+        end)
+
+        -- Tunggu sampai LockActive false atau karakter hilang
+        while LockActive and Player.Character do
+            task.wait(0.5)
+        end
+        if connection then connection:Disconnect() end
+        LockActive = false
+        print("[Teleport] Lock thread ended")
+    end)
+end
+
+-- ============================================================
+-- UI ELEMENTS
+-- ============================================================
+
 local IslandDropdown = TeleportTab:CreateDropdown({
-	Name = "Select Island",
-	 Items = getIslandDropdownItems(),
+    Name = "Select Island",
+    Items = getIslandDropdownItems(),
     Callback = function(Value)
         SelectedIsland = Value
-    end
+    end,
 })
 
+-- Refresh dropdown otomatis saat folder Islands berubah
 task.spawn(function()
     local function refresh()
         if IslandDropdown and IslandDropdown.Refresh then
             IslandDropdown:Refresh(getIslandDropdownItems())
         end
     end
-
     local folder = getIslandFolder()
     if not folder then
         for _ = 1, 20 do
@@ -7492,7 +7659,6 @@ task.spawn(function()
             task.wait(0.5)
         end
     end
-
     refresh()
     if folder then
         folder.ChildAdded:Connect(refresh)
@@ -7500,20 +7666,111 @@ task.spawn(function()
     end
 end)
 
+-- Tombol Teleport
 TeleportTab:CreateButton({
-	Name = "Teleport to Island",
-	Icon = "rbxassetid://7733920644",
-	  Callback = function()
+    Name = "Teleport to Island",
+    Icon = "rbxassetid://7733920644",
+    Callback = function()
         local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
-        if not hrp then return end
+        if not hrp then
+            Window:Notify({
+                Title = "Error",
+                Content = "Character not found!",
+                Duration = 2,
+            })
+            return
+        end
 
         local cf = resolveIslandCFrame(SelectedIsland)
-        if not cf then return end
+        if not cf then
+            Window:Notify({
+                Title = "Error",
+                Content = "Invalid island selected!",
+                Duration = 2,
+            })
+            return
+        end
 
-        local _, y, _ = hrp.CFrame:ToOrientation()
-        local dest = cf.Position + Vector3.new(0, 3, 0)
-        hrp.CFrame = CFrame.new(dest) * CFrame.Angles(0, y, 0)
-    end
+        -- Matikan lock jika aktif
+        if LockActive then
+            stopLock()
+        end
+
+        local success = teleportWithRetry(cf, 3, 0.3)
+        if success then
+            Window:Notify({
+                Title = "Teleport",
+                Content = "Teleported to " .. SelectedIsland,
+                Duration = 2,
+            })
+        else
+            Window:Notify({
+                Title = "Teleport Failed",
+                Content = "Could not reach destination. Try using Lock.",
+                Duration = 3,
+            })
+        end
+    end,
+})
+
+-- Toggle Lock Position
+TeleportTab:CreateToggle({
+    Name = "Lock Position to Island",
+    SubText = "Keep teleporting every frame (bypass anti-teleport)",
+    Default = false,
+    Callback = function(state)
+        if state then
+            local cf = resolveIslandCFrame(SelectedIsland)
+            if not cf then
+                Window:Notify({
+                    Title = "Error",
+                    Content = "Select a valid island first!",
+                    Duration = 2,
+                })
+                -- Toggle akan tetap false karena kita set false di sini
+                -- Tapi UI toggle tidak bisa di-set dari sini secara langsung, jadi kita beri notifikasi dan kita matikan.
+                -- Alternatif: kita simpan state terakhir.
+                -- Kita bisa set LockActive = false dan tidak memulai lock.
+                return
+            end
+            startLock(cf)
+            Window:Notify({
+                Title = "Lock Enabled",
+                Content = "Position locked to " .. SelectedIsland,
+                Duration = 2,
+            })
+        else
+            stopLock()
+            Window:Notify({
+                Title = "Lock Disabled",
+                Content = "Position lock released",
+                Duration = 2,
+            })
+        end
+    end,
+})
+
+-- Tambahkan tombol untuk unlock cepat (opsional)
+TeleportTab:CreateButton({
+    Name = "Unlock Position",
+    SubText = "Stop locking to island",
+    Icon = "rbxassetid://7733920644",
+    Callback = function()
+        if LockActive then
+            stopLock()
+            Window:Notify({
+                Title = "Unlocked",
+                Content = "Position lock released",
+                Duration = 2,
+            })
+        else
+            Window:Notify({
+                Title = "Info",
+                Content = "No lock active",
+                Duration = 2,
+            })
+        end
+    end,
 })
 
 TeleportTab:CreateSection({ Name = "Tp To Player", Icon = "rbxassetid://7733955511" })
