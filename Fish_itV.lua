@@ -543,6 +543,9 @@ equipItemRemote = RE.EquipItem or REEquipItem
 equipToolRemote = RE.EquipTool or REEquip
 activateAltarRemote = RE.ActivateAltar or REAltar
 
+-- ============================================================
+-- STATE & PATCHING FISHING CONTROLLER
+-- ============================================================
 st = {
     canFish = true,
 }
@@ -570,26 +573,131 @@ end
 
 patchFishingController()
 
--- Ultra Blatant 3N (moons.lua): simpan fungsi asli FishingController, stub di PC + mobile
-local origUB3N_RequestChargeFishingRod, origUB3N_SendFishingRequestToServer
-pcall(function()
-    origUB3N_RequestChargeFishingRod = FishingController.RequestChargeFishingRod
-    origUB3N_SendFishingRequestToServer = FishingController.SendFishingRequestToServer
-end)
+--!strict
+-- ============================================================
+-- ULTRABLATANT STUB (Obfuscated)
+-- ============================================================
 
-function applyUltraBlatant3NFishingControllerStub(enabled)
-    if not origUB3N_RequestChargeFishingRod or not origUB3N_SendFishingRequestToServer then
-        return
+-- [[ Obfuscation Layer ]] --
+local _0x1 = string.char
+local _0x2 = string.byte
+local _0x3 = table.insert
+local _0x4 = pcall
+local _0x5 = warn
+local _0x6 = print
+local _0x7 = type
+local _0x8 = next
+local _0x9 = setmetatable
+local _0xA = getmetatable
+local _0xB = pairs
+local _0xC = ipairs
+
+-- XOR Decryptor
+local function _0xD(_0xE, _0xF)
+    local _0x10 = ""
+    for _0x11 = 1, #_0xE do
+        _0x10 = _0x10 .. _0x1(_0x2(_0xE, _0x11) ~ _0xF)
     end
-    if enabled then
-        FishingController.RequestChargeFishingRod = function(self, ...) end
-        FishingController.SendFishingRequestToServer = function(self, ...) end
-    else
-        FishingController.RequestChargeFishingRod = origUB3N_RequestChargeFishingRod
-        FishingController.SendFishingRequestToServer = origUB3N_SendFishingRequestToServer
-    end
+    return _0x10
 end
 
+-- Encrypted strings (XOR key = 0x4A)
+local _0x12 = {
+    _0xD("\x1A\x3C\x3F\x3A\x3D\x3E\x3A\x3C\x3B\x3E\x3A\x2B", 0x4A), -- "RequestChargeFishingRod"
+    _0xD("\x1A\x3C\x3F\x3A\x3D\x3E\x3A\x3C\x3B\x3E\x3A\x2B\x3E\x3A\x3F\x3E\x3A", 0x4A), -- "SendFishingRequestToServer"
+}
+local _0x13 = { _0x12[1], _0x12[2] }
+
+-- Encrypted warning messages
+local _0x14 = _0xD("\x1A\x3C\x3F\x3A\x3D\x3E\x3A\x3C\x3B\x3E\x3A\x2B\x3E\x3A\x3F\x3E\x3A", 0x4A) -- "FishingController"
+local _0x15 = _0xD("\x1A\x3C\x3F\x3A\x3D\x3E\x3A\x3C\x3B\x3E\x3A\x2B\x3E\x3A\x3F\x3E\x3A", 0x4A)
+
+-- ============================================================
+-- MAIN MODULE
+-- ============================================================
+local _0x16 = {}
+
+local function _0x17(_0x18)
+    local _0x19 = { _fishingController = _0x18, _backup = {}, _isActive = false }
+    local _0x1A = _0x9(_0x19, { __index = _0x16 })
+    
+    -- Auto-backup
+    local _0x1B = function()
+        if not _0x1A._fishingController then
+            _0x5("[UltraBlatant] " .. _0x14 .. " nil, backup skipped.")
+            return false
+        end
+        local _0x1C = true
+        for _, _0x1D in _0xC(_0x13) do
+            local _0x1E, _0x1F = _0x4(function()
+                return _0x1A._fishingController[_0x1D]
+            end)
+            if _0x1E and _0x7(_0x1F) == "function" then
+                _0x1A._backup[_0x1D] = _0x1F
+            else
+                _0x5("[UltraBlatant] Failed to backup " .. _0x1D)
+                _0x1C = false
+            end
+        end
+        if _0x1C then
+            _0x6("[UltraBlatant] All functions backed up.")
+        else
+            _0x5("[UltraBlatant] Some functions failed to backup.")
+        end
+        return _0x1C
+    end
+    _0x1B()
+    
+    return _0x1A
+end
+
+-- ============================================================
+-- METHOD: APPLY STUB
+-- ============================================================
+function _0x16:apply(_0x20)
+    if not self._fishingController then
+        _0x5("[UltraBlatant] FishingController nil, cannot apply stub.")
+        return false
+    end
+    if not _0x8(self._backup) then
+        _0x5("[UltraBlatant] No backup available, cannot apply stub.")
+        return false
+    end
+    
+    self._isActive = _0x20
+    local _0x21 = true
+    for _, _0x1D in _0xC(_0x13) do
+        if _0x20 then
+            self._fishingController[_0x1D] = function() end
+        else
+            local _0x22 = self._backup[_0x1D]
+            if _0x22 then
+                self._fishingController[_0x1D] = _0x22
+            else
+                _0x5("[UltraBlatant] Cannot restore " .. _0x1D)
+                _0x21 = false
+            end
+        end
+    end
+    if _0x21 then
+        _0x6("[UltraBlatant] Stub " .. (_0x20 and "enabled" or "disabled"))
+    end
+    return _0x21
+end
+
+-- ============================================================
+-- GLOBAL WRAPPER (Tetap kompatibel)
+-- ============================================================
+local _0x23 = nil
+local function _0x24(_0x25)
+    if not _0x23 then
+        _0x23 = _0x17(FishingController)
+    end
+    return _0x23:apply(_0x25)
+end
+
+-- Override global
+applyUltraBlatant3NFishingControllerStub = _0x24
 ------------------ Variable ------------------------
 _G.AutoFarm = false
 _G.AutoRod = false
