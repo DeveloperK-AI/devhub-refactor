@@ -272,16 +272,29 @@ function DataCache:Invalidate()
     self.inventory = nil
     self.enchantStones = nil
 end
-
 -- ============================================================
 -- UI LIBRARY & WINDOW
 -- ============================================================
-local VoraLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/DeveloperK-AI/devhub-refactor/main/libnew.lua"))()
-Window = VoraLib:CreateWindow({
-    Name = "Vora Hub",
-    Intro = true,
-})
-
+local VoraLib = nil
+local ok, err = pcall(function()
+    local content = game:HttpGet("https://raw.githubusercontent.com/DeveloperK-AI/devhub-refactor/main/libnew.lua")
+    if content and content ~= "" then
+        local fn = loadstring(content)
+        if type(fn) == "function" then
+            VoraLib = fn()
+        else
+            warn("[Main] loadstring returned nil for VoraLib")
+        end
+    else
+        warn("[Main] Empty content for VoraLib")
+    end
+end)
+if not ok then
+    warn("[Main] Failed to load VoraLib:", err)
+end
+if not VoraLib then
+    error("[Main] VoraLib is nil! Cannot create UI.")
+end
 -- ============================================================
 -- TABS
 -- ============================================================
@@ -6679,7 +6692,7 @@ PlayerTab:CreateButton({
                     fn()
                     Window:Notify({ Title = "Fly GUI", Content = "Activated!", Duration = 3 })
                 else
-                    warn("[FlyGui] Invalid script content")
+                    warn("[FlyGui] loadstring returned nil")
                 end
             end
         end)
@@ -8613,7 +8626,7 @@ SettingsTab:CreateToggle({
 })
 
 -- ============================================================
--- HIDE IDENTITY FEATURES (Refactored)
+-- HIDE IDENTITY FEATURES (Refactored - Aman)
 -- ============================================================
 SettingsTab:CreateSection({ Name = "Hide Identity Features", Icon = "rbxassetid://7743875962" })
 
@@ -8647,7 +8660,7 @@ local UpdateLoopActive = false
 
 -- Helper: Create Shimmer Gradient with thread management
 local function createMovingGradient(label)
-    if not label or not label:IsA("TextLabel") then return nil
+    if not label or not label:IsA("TextLabel") then return nil end
     local oldGradient = label:FindFirstChild("ShimmerGradient")
     if oldGradient then oldGradient:Destroy() end
     local gradient = Instance.new("UIGradient")
@@ -8843,6 +8856,7 @@ SettingsTab:CreateInput({
     end,
 })
 
+-- Toggle Hide Identity dengan loadstring aman
 SettingsTab:CreateToggle({
     Name = "Hide Identity",
     Default = false,
@@ -8851,20 +8865,30 @@ SettingsTab:CreateToggle({
         if state then
             startUpdateLoop()
             updateStats()
-            -- Load external identifier dengan error handling total
+            -- 🔥 LOAD EXTERNAL SCRIPT DENGAN AMAN
             local ok, err = pcall(function()
-    local content = game:HttpGet("https://raw.githubusercontent.com/DeveloperK-AI/devhub-refactor/main/identifier.lua")
-    if content and content ~= "" then
-        local fn = loadstring(content)
-        if type(fn) == "function" then
-            fn()
-        end
-    end
-end)
-if not ok then
-    warn("[HideIdentity] Failed to load external script:", err)
-end
-        else            -- Restore original texts
+                local content = game:HttpGet("https://raw.githubusercontent.com/DeveloperK-AI/devhub-refactor/main/identifier.lua")
+                if content and content ~= "" then
+                    local fn = loadstring(content)
+                    if type(fn) == "function" then
+                        fn()
+                    else
+                        warn("[HideIdentity] loadstring returned nil, script may be invalid")
+                    end
+                else
+                    warn("[HideIdentity] Empty content from URL")
+                end
+            end)
+            if not ok then
+                warn("[HideIdentity] Failed to load external script:", err)
+                Window:Notify({
+                    Title = "Warning",
+                    Content = "Hide Identity external script failed to load.",
+                    Duration = 3
+                })
+            end
+        else
+            -- Restore original texts
             for obj, original in pairs(OriginalTexts) do
                 if obj and obj.Parent and obj:IsA("TextLabel") then
                     obj.Text = original
@@ -8892,7 +8916,6 @@ Player.CharacterAdded:Connect(function(newChar)
         setupOverheadListener(overhead)
     end
 end)
-
 -- ============================================
 -- CENTRALIZED SERVER HOP FUNCTION (Refactored)
 -- ============================================
