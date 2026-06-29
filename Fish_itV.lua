@@ -7042,7 +7042,6 @@ local WEATHER_DATA = {
     Storm = { display = "Stormy", price = 35000 },
     Radiant = { display = "Radiant", price = 50000 },
     ["Shark Hunt"] = { display = "Shark Hunt", price = 300000 },
-    ["Treasure Hunt"] = { display = "Treasure Hunt", price = 1000000 },
 }
 
 -- Build display names from data
