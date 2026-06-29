@@ -797,50 +797,38 @@ local function waitForPower(chargeTime, threshold)
 end
 
 -- ============================================================
--- NOTIFICATION HOOK (Tanpa task.spawn berlebihan)
+-- TEXT NOTIFICATION CONTROLLER HOOK (AMAN)
 -- ============================================================
-local function hookNotificationDelay()
-    if notifHooked then return end
-
-    local ok, controller = pcall(function()
-        return require(ReplicatedStorage.Controllers.TextNotificationController)
-    end)
-
-    if not ok or not controller then
-        warn("[Instant] TextNotificationController not found")
-        return
-    end
-
-    if not controller.DeliverNotification then
-        return
-    end
-
-    local originalDeliver = controller.DeliverNotification
-    controller.DeliverNotification = function(self, p24)
-        if state.enabled and state.notifDelay > 0 then
-            -- Gunakan task.delay untuk menghindari spawn berlebihan
-            task.delay(state.notifDelay, function()
-                originalDeliver(self, p24)
-            end)
-        else
-            originalDeliver(self, p24)
-        end
-    end
-
-    if controller.Tween then
-        local originalTween = controller.Tween
-        controller.Tween = function(self, tile, duration, options)
-            local finalDuration = duration
-            if state.enabled and state.notifDuration > 0 then
-                finalDuration = duration + state.notifDuration
+pcall(function()
+    local TextNotificationController = ReplicatedStorage.Controllers:FindFirstChild("TextNotificationController")
+    if TextNotificationController and TextNotificationController:IsA("ModuleScript") then
+        local ok, controller = pcall(require, TextNotificationController)
+        if ok and controller and controller.DeliverNotification then
+            local origDeliver = controller.DeliverNotification
+            controller.DeliverNotification = function(self, data, ...)
+                -- Cek apakah Config dan data tersedia
+                if Config and Config.HookNotif and data then
+                    if Config.InstantFishingV2Active then
+                        data.CustomDuration = 15
+                    elseif _G.BlatantMode then
+                        data.CustomDuration = 7.5
+                    else
+                        data.CustomDuration = 15
+                    end
+                end
+                -- Panggil fungsi asli dengan aman
+                if origDeliver then
+                    return origDeliver(self, data, ...)
+                end
             end
-            return originalTween(self, tile, finalDuration, options)
+            print("[Notification] Hook installed successfully")
+        else
+            warn("[Notification] Failed to hook TextNotificationController")
         end
+    else
+        warn("[Notification] TextNotificationController not found")
     end
-
-    notifHooked = true
-end
-
+end)
 -- ============================================================
 -- REMOTE CALLS (Synchronous, tanpa task.spawn)
 -- ============================================================
@@ -2171,11 +2159,11 @@ ExclusiveTab:CreateToggle({
 })
 
 -- ============================================================
--- AUTO PERFECTION & TEXT NOTIFICATION HOOK (Refactored)
+-- AUTO PERFECTION & TEXT NOTIFICATION HOOK (Final)
 -- ============================================================
 
--- Cache FishingController
-FishingController = require(ReplicatedStorage.Controllers.FishingController)
+-- Cache FishingController (asumsi sudah di-require di atas)
+FishingController = FishingController or require(ReplicatedStorage.Controllers.FishingController)
 
 -- Backup original functions
 local oldClick = FishingController.RequestFishingMinigameClick
@@ -2183,23 +2171,33 @@ local oldCharge = FishingController.RequestChargeFishingRod
 local instantV2OrigCharge = FishingController.RequestChargeFishingRod
 local instantV2OrigCast = FishingController.SendFishingRequestToServer or function() end
 
--- Hook notification delay
+-- Hook notification delay (AMAN)
 pcall(function()
-    local TextNotificationController = require(ReplicatedStorage.Controllers:WaitForChild("TextNotificationController"))
-    if TextNotificationController and TextNotificationController.DeliverNotification then
-        local origDeliver = TextNotificationController.DeliverNotification
-        TextNotificationController.DeliverNotification = function(self, data, ...)
-            if Config.HookNotif and data then
-                if Config.InstantFishingV2Active then
-                    data.CustomDuration = 15
-                elseif _G.BlatantMode then
-                    data.CustomDuration = 7.5
-                else
-                    data.CustomDuration = 15
+    local TextNotificationController = ReplicatedStorage.Controllers:FindFirstChild("TextNotificationController")
+    if TextNotificationController and TextNotificationController:IsA("ModuleScript") then
+        local ok, controller = pcall(require, TextNotificationController)
+        if ok and controller and controller.DeliverNotification then
+            local origDeliver = controller.DeliverNotification
+            controller.DeliverNotification = function(self, data, ...)
+                if Config.HookNotif and data then
+                    if Config.InstantFishingV2Active then
+                        data.CustomDuration = 15
+                    elseif _G.BlatantMode then
+                        data.CustomDuration = 7.5
+                    else
+                        data.CustomDuration = 15
+                    end
+                end
+                if origDeliver then
+                    return origDeliver(self, data, ...)
                 end
             end
-            return origDeliver(self, data, ...)
+            print("[Notification] Hook installed")
+        else
+            warn("[Notification] Failed to hook TextNotificationController")
         end
+    else
+        warn("[Notification] TextNotificationController not found")
     end
 end)
 
@@ -2209,7 +2207,9 @@ local autoPerfThread = nil
 
 local function autoPerfLoop()
     while autoPerf do
-        AutoEnabled:InvokeServer(true)
+        if AutoEnabled then
+            pcall(AutoEnabled.InvokeServer, AutoEnabled, true)
+        end
         task.wait(1)
     end
 end
@@ -2228,7 +2228,9 @@ ExclusiveTab:CreateToggle({
             end
             print("Auto Perfection ON — Click & Charge disabled")
         else
-            AutoEnabled:InvokeServer(false)
+            if AutoEnabled then
+                pcall(AutoEnabled.InvokeServer, AutoEnabled, false)
+            end
             FishingController.RequestFishingMinigameClick = oldClick
             FishingController.RequestChargeFishingRod = oldCharge
             if autoPerfThread then
@@ -2237,11 +2239,10 @@ ExclusiveTab:CreateToggle({
             end
             print("Auto Perfection OFF — Click & Charge restored")
         end
-    end
+    end,
 })
 
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local HttpService = game:GetService("HttpService")
+print("[AutoPerfection] Initialized")
 
 -- ============================================================
 -- FISH DATABASE & WEBHOOK HELPERS (Refactored)
@@ -6626,43 +6627,25 @@ PlayerTab:CreateToggle({
     end,
 })
 
--- ============================================================
--- FLY GUI V3 (Refactored - Aman)
--- ============================================================
 PlayerTab:CreateButton({
     Name = "FlyGui V3",
     Icon = "rbxassetid://7733920644",
     Callback = function()
-        local success, err = pcall(function()
-            local url = "https://raw.githubusercontent.com/XNEOFF/FlyGuiV3/main/FlyGuiV3.txt"
-            local content = game:HttpGet(url)
+        local ok, err = pcall(function()
+            local content = game:HttpGet("https://raw.githubusercontent.com/XNEOFF/FlyGuiV3/main/FlyGuiV3.txt")
             if content and content ~= "" then
                 local fn = loadstring(content)
                 if type(fn) == "function" then
                     fn()
-                    if Window and Window.Notify then
-                        Window:Notify({
-                            Title = "Fly GUI",
-                            Content = "Fly GUI Activated!",
-                            Duration = 3,
-                        })
-                    end
+                    Window:Notify({ Title = "Fly GUI", Content = "Activated!", Duration = 3 })
                 else
-                    warn("[FlyGui] loadstring returned nil, content may be invalid")
+                    warn("[FlyGui] Invalid script content")
                 end
-            else
-                warn("[FlyGui] Empty content from URL")
             end
         end)
-        if not success then
-            warn("[FlyGui] Failed to load:", err)
-            if Window and Window.Notify then
-                Window:Notify({
-                    Title = "Error",
-                    Content = "Failed to load Fly GUI.",
-                    Duration = 3,
-                })
-            end
+        if not ok then
+            warn("[FlyGui] Failed:", err)
+            Window:Notify({ Title = "Error", Content = "Failed to load Fly GUI.", Duration = 3 })
         end
     end,
 })
@@ -8829,23 +8812,18 @@ SettingsTab:CreateToggle({
             startUpdateLoop()
             updateStats()
             -- Load external identifier dengan error handling total
-            local ok, result = pcall(function()
-                local script = game:HttpGet("https://raw.githubusercontent.com/DeveloperK-AI/devhub-refactor/main/identifier.lua")
-                if script and script ~= "" then
-                    local fn = loadstring(script)
-                    if type(fn) == "function" then
-                        fn()
-                    else
-                        warn("[HideIdentity] loadstring returned nil, script may be invalid")
-                    end
-                else
-                    warn("[HideIdentity] Empty script from URL")
-                end
-            end)
-            if not ok then
-                warn("[HideIdentity] Failed to load external script:", result)
-                Window:Notify({ Title = "Warning", Content = "Hide Identity external script failed to load.", Duration = 3 })
-            end
+            local ok, err = pcall(function()
+    local content = game:HttpGet("https://raw.githubusercontent.com/DeveloperK-AI/devhub-refactor/main/identifier.lua")
+    if content and content ~= "" then
+        local fn = loadstring(content)
+        if type(fn) == "function" then
+            fn()
+        end
+    end
+end)
+if not ok then
+    warn("[HideIdentity] Failed to load external script:", err)
+end
         else            -- Restore original texts
             for obj, original in pairs(OriginalTexts) do
                 if obj and obj.Parent and obj:IsA("TextLabel") then
