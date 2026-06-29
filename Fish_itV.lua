@@ -2159,91 +2159,131 @@ ExclusiveTab:CreateToggle({
 })
 
 -- ============================================================
--- AUTO PERFECTION & TEXT NOTIFICATION HOOK (Final)
+-- AUTO PERFECTION & TEXT NOTIFICATION HOOK (Dengan Hookfunction)
 -- ============================================================
 
--- Cache FishingController (asumsi sudah di-require di atas)
+-- Cache FishingController
 FishingController = FishingController or require(ReplicatedStorage.Controllers.FishingController)
 
--- Backup original functions
-local oldClick = FishingController.RequestFishingMinigameClick
-local oldCharge = FishingController.RequestChargeFishingRod
-local instantV2OrigCharge = FishingController.RequestChargeFishingRod
-local instantV2OrigCast = FishingController.SendFishingRequestToServer or function() end
+-- Auto Perfection state
+local autoPerf = false
+local autoPerfThread = nil
 
--- Hook notification delay (AMAN)
+-- Simpan original functions (dengan pcall untuk aman)
+local oldClick = nil
+local oldCharge = nil
+local clickHooked = false
+local chargeHooked = false
+
+-- Backup original functions menggunakan hookfunction jika tersedia
+if type(hookfunction) == "function" then
+    -- Hanya jika hookfunction tersedia
+    if FishingController.RequestFishingMinigameClick then
+        oldClick = hookfunction(FishingController.RequestFishingMinigameClick, function(self, ...)
+            if autoPerf then
+                -- Jika autoPerf aktif, tidak melakukan apa-apa
+                return
+            end
+            if oldClick then
+                return oldClick(self, ...)
+            end
+        end)
+        clickHooked = true
+    end
+
+    if FishingController.RequestChargeFishingRod then
+        oldCharge = hookfunction(FishingController.RequestChargeFishingRod, function(self, ...)
+            if autoPerf then
+                return
+            end
+            if oldCharge then
+                return oldCharge(self, ...)
+            end
+        end)
+        chargeHooked = true
+    end
+else
+    -- Fallback: overwrite langsung dengan backup (tapi ini lebih berisiko)
+    oldClick = FishingController.RequestFishingMinigameClick
+    oldCharge = FishingController.RequestChargeFishingRod
+    clickHooked = true
+    chargeHooked = true
+end
+
+local function toggleAutoPerfection(state)
+    autoPerf = state
+    if state then
+        if not autoPerfThread then
+            autoPerfThread = task.spawn(function()
+                while autoPerf do
+                    if AutoEnabled then
+                        pcall(AutoEnabled.InvokeServer, AutoEnabled, true)
+                    end
+                    task.wait(1)
+                end
+            end)
+        end
+        print("Auto Perfection ON")
+    else
+        -- Matikan thread
+        if autoPerfThread then
+            task.cancel(autoPerfThread)
+            autoPerfThread = nil
+        end
+        if AutoEnabled then
+            pcall(AutoEnabled.InvokeServer, AutoEnabled, false)
+        end
+        print("Auto Perfection OFF")
+    end
+end
+
+-- ============================================================
+-- UI TOGGLE
+-- ============================================================
+ExclusiveTab:CreateSection({ Name = "Auto Perfection" })
+ExclusiveTab:CreateToggle({
+    Name = "Auto Perfection",
+    Default = false,
+    Callback = function(state)
+        toggleAutoPerfection(state)
+    end,
+})
+
+-- ============================================================
+-- TEXT NOTIFICATION HOOK (AMAN)
+-- ============================================================
 pcall(function()
     local TextNotificationController = ReplicatedStorage.Controllers:FindFirstChild("TextNotificationController")
     if TextNotificationController and TextNotificationController:IsA("ModuleScript") then
         local ok, controller = pcall(require, TextNotificationController)
         if ok and controller and controller.DeliverNotification then
             local origDeliver = controller.DeliverNotification
-            controller.DeliverNotification = function(self, data, ...)
-                if Config.HookNotif and data then
-                    if Config.InstantFishingV2Active then
-                        data.CustomDuration = 15
-                    elseif _G.BlatantMode then
-                        data.CustomDuration = 7.5
-                    else
-                        data.CustomDuration = 15
+            if type(origDeliver) == "function" then
+                controller.DeliverNotification = function(self, data, ...)
+                    if Config and Config.HookNotif and data then
+                        if Config.InstantFishingV2Active then
+                            data.CustomDuration = 15
+                        elseif _G.BlatantMode then
+                            data.CustomDuration = 7.5
+                        else
+                            data.CustomDuration = 15
+                        end
                     end
-                end
-                if origDeliver then
                     return origDeliver(self, data, ...)
                 end
+                print("[Notification] Hook installed successfully")
+            else
+                warn("[Notification] origDeliver is not a function")
             end
-            print("[Notification] Hook installed")
         else
-            warn("[Notification] Failed to hook TextNotificationController")
+            warn("[Notification] Failed to load TextNotificationController")
         end
     else
         warn("[Notification] TextNotificationController not found")
     end
 end)
 
--- Auto Perfection state
-local autoPerf = false
-local autoPerfThread = nil
-
-local function autoPerfLoop()
-    while autoPerf do
-        if AutoEnabled then
-            pcall(AutoEnabled.InvokeServer, AutoEnabled, true)
-        end
-        task.wait(1)
-    end
-end
-
-ExclusiveTab:CreateSection({ Name = "Auto Perfection" })
-ExclusiveTab:CreateToggle({
-    Name = "Auto Perfection",
-    Default = false,
-    Callback = function(state)
-        autoPerf = state
-        if state then
-            FishingController.RequestFishingMinigameClick = function(...) end
-            FishingController.RequestChargeFishingRod = function(...) end
-            if not autoPerfThread then
-                autoPerfThread = task.spawn(autoPerfLoop)
-            end
-            print("Auto Perfection ON — Click & Charge disabled")
-        else
-            if AutoEnabled then
-                pcall(AutoEnabled.InvokeServer, AutoEnabled, false)
-            end
-            FishingController.RequestFishingMinigameClick = oldClick
-            FishingController.RequestChargeFishingRod = oldCharge
-            if autoPerfThread then
-                task.cancel(autoPerfThread)
-                autoPerfThread = nil
-            end
-            print("Auto Perfection OFF — Click & Charge restored")
-        end
-    end,
-})
-
 print("[AutoPerfection] Initialized")
-
 -- ============================================================
 -- FISH DATABASE & WEBHOOK HELPERS (Refactored)
 -- ============================================================
