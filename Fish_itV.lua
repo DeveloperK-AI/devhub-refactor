@@ -271,7 +271,7 @@ end
 local VoraLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/DeveloperK-AI/devhub-refactor/main/libnew.lua"))()
 
  Window = VoraLib:CreateWindow({
-	Name = "Vora Hub",
+	Name = "DeveloperK Hub",
 	Intro = true
 })
 
