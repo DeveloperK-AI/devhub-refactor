@@ -129,17 +129,18 @@ function IdentityManager:_disguiseCharacter(char: Model?, id: number)
         table.insert(self._connections, childAddedConn)
         
         -- Transfer animations
-        local animateClone = disguiseClone:FindFirstChild("Animate")
-        if animateClone then
-            for _, child in pairs(animateClone:GetChildren()) do
-                child:SetAttribute("Disguise", true)
-                local real = char.Animate:FindFirstChild(child.Name)
-                if child:IsA("StringValue") and real then
-                    real.Parent = game
-                    child.Parent = char.Animate
-                end
-            end
+local animateClone = disguiseClone:FindFirstChild("Animate")
+local animateReal = char:FindFirstChild("Animate")  -- ✅ Aman, tidak nil
+if animateClone and animateReal then
+    for _, child in pairs(animateClone:GetChildren()) do
+        child:SetAttribute("Disguise", true)
+        local real = animateReal:FindFirstChild(child.Name)
+        if child:IsA("StringValue") and real then
+            real.Parent = game
+            child.Parent = animateReal
         end
+    end
+end
         
         -- Transfer accessories with welds
         for _, child in pairs(disguiseClone:GetChildren()) do
