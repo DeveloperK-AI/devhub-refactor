@@ -134,32 +134,34 @@ local function spawnRipple(
     tweenInfo: TweenInfo
 )
     task.spawn(function()
-        local ox = mouseX - parent.AbsolutePosition.X
-        local oy = mouseY - parent.AbsolutePosition.Y
-        local half = sizeTarget / 2
+        -- Bungkus dengan pcall agar error di dalam ripple tidak mengganggu UI utama
+        pcall(function()
+            local ox = mouseX - parent.AbsolutePosition.X
+            local oy = mouseY - parent.AbsolutePosition.Y
+            local half = sizeTarget / 2
 
-        local Ripple = Create("Frame", {
-            Parent               = parent,
-            BackgroundColor3     = Color3.fromRGB(255, 255, 255),
-            BackgroundTransparency = 0.8,
-            BorderSizePixel      = 0,
-            Position             = UDim2.new(0, ox, 0, oy),
-            Size                 = UDim2.new(0, 0, 0, 0),
-            ZIndex               = parent.ZIndex + 1,
-        }) :: Frame
-        Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = Ripple })
+            local Ripple = Create("Frame", {
+                Parent               = parent,
+                BackgroundColor3     = Color3.fromRGB(255, 255, 255),
+                BackgroundTransparency = 0.8,
+                BorderSizePixel      = 0,
+                Position             = UDim2.new(0, ox, 0, oy),
+                Size                 = UDim2.new(0, 0, 0, 0),
+                ZIndex               = parent.ZIndex + 1,
+            }) :: Frame
+            Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = Ripple })
 
-        local tween = TweenService:Create(Ripple, tweenInfo, {
-            Size     = UDim2.new(0, sizeTarget, 0, sizeTarget),
-            Position = UDim2.new(0, ox - half, 0, oy - half),
-            BackgroundTransparency = 1,
-        })
-        tween:Play()
-        tween.Completed:Wait()
-        Ripple:Destroy()
+            local tween = TweenService:Create(Ripple, tweenInfo, {
+                Size     = UDim2.new(0, sizeTarget, 0, sizeTarget),
+                Position = UDim2.new(0, ox - half, 0, oy - half),
+                BackgroundTransparency = 1,
+            })
+            tween:Play()
+            tween.Completed:Wait()
+            Ripple:Destroy()
+        end)
     end)
 end
-
 --- Make a GuiObject draggable by holding `topBar`.
 local function MakeDraggable(topBar: GuiObject, target: GuiObject)
     local dragging    = false
