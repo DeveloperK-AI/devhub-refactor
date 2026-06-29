@@ -35,47 +35,65 @@ _G.SavedData = _G.SavedData or {
     FishNotif = {}
 }
 
+-- ============================================================
+-- FIRE LOCAL EVENT (OPTIMIZED - SINGLE THREAD PER CALL)
+-- ============================================================
 function FireLocalEvent(remote, ...)
     if not remote or not remote.OnClientEvent then return end
-    local args = {...}
+
+    local args = { ... }
     local signal = remote.OnClientEvent
-    for _, connection in pairs(getconnections(signal)) do
-        if connection.Function then
-            task.spawn(function()
-                pcall(function()
-                    connection.Function(unpack(args))
-                end)
-            end)
+
+    -- Hanya buat 1 thread per panggilan, bukan 1 thread per connection!
+    task.spawn(function()
+        for _, connection in pairs(getconnections(signal)) do
+            if connection.Function then
+                pcall(connection.Function, unpack(args))
+            end
         end
-    end
+    end)
 end
 
-local saveCount = 0
+-- ============================================================
+-- SAVE COUNT (DIGUNAKAN OLEH HOOKREMOTE)
+-- ============================================================
+local saveCount = 0  -- ubah ke local agar tidak mencemari global, tapi masih bisa diakses oleh HookRemote (closure)
+-- Catatan: jika ada kode lain yang mengakses saveCount secara global, ubah kembali ke non-local.
+-- Saya asumsikan hanya HookRemote yang menggunakannya.
 
-function GetServerRemote(humanName)
-    local key = humanName:gsub("^R[FE]/", "")
-    return remoteMap[key]
+-- ============================================================
+-- GET SERVER REMOTE (OPTIMIZED)
+-- ============================================================
+function GetServerRemote(humanName: string)
+    -- humanName selalu diawali "RF/" atau "RE/" (3 karakter)
+    return remoteMap[humanName:sub(4)]
 end
 
-function HookRemote(humanName, storageKey)
+-- ============================================================
+-- HOOK REMOTE (CACHE PLAYERS SERVICE)
+-- ============================================================
+local PlayersService = game:GetService("Players")  -- cache di luar fungsi
+
+function HookRemote(humanName: string, storageKey: string): boolean
     local remote = GetServerRemote(humanName)
-    if remote then
-        remote.OnClientEvent:Connect(function(...)
-            if saveCount < 7 then
-                _G.SavedData[storageKey] = {...}
-                local args = {...}
-                if storageKey == "CaughtVisual" then
-                    local lp = game:GetService("Players").LocalPlayer
-                    local myName = lp and lp.Name
-                    if myName and tostring(args[1]) == tostring(myName) then
-                        saveCount = saveCount + 1
-                    end
+    if not remote then return false end
+
+    remote.OnClientEvent:Connect(function(...)
+        if saveCount < 7 then
+            local args = { ... }
+            _G.SavedData[storageKey] = args
+
+            if storageKey == "CaughtVisual" then
+                local lp = PlayersService.LocalPlayer
+                local myName = lp and lp.Name
+                if myName and tostring(args[1]) == tostring(myName) then
+                    saveCount = saveCount + 1
                 end
             end
-        end)
-        return true
-    end
-    return false
+        end
+    end)
+
+    return true
 end
 
 BuyRod              = RF("PurchaseFishingRod")
