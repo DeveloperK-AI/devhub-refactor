@@ -96,6 +96,9 @@ function HookRemote(humanName: string, storageKey: string): boolean
     return true
 end
 
+-- ============================================================
+-- REMOTE VARIABLES (RF / RE)
+-- ============================================================
 BuyRod              = RF("PurchaseFishingRod")
 BuyBait             = RF("PurchaseBait")
 BuyCharm            = RF("PurchaseCharm")
@@ -141,12 +144,14 @@ BaitDestroyed       = RE("BaitDestroyed")
 PirateChest         = RE("ClaimPirateChest")
 GainMaze            = RE("GainAccessToMaze")
 PlaceLever          = RE("PlaceLeverItem")
-REDialogueEnded      = RE("DialogueEnded")
+REDialogueEnded     = RE("DialogueEnded")
 RFCreateTranscendedStone = RF("CreateTranscendedStone")
 EquipBait           = RE("EquipBait")
 
--- moons.lua: Config / Events / Tasks / needCast / skip / blatantFishCycleCount (FAST 3 KEDIP & UB)
-Config = {
+-- ============================================================
+-- CONFIGURATION (moons.lua style)
+-- ============================================================
+_G.Config = _G.Config or {  -- gunakan _G agar eksplisit, tapi tetap global
     HookNotif = false,
     InstantFishingV2Active = false,
     isMinig = false,
@@ -161,49 +166,68 @@ Config = {
         Stats = { castCount = 0, startTime = 0 },
     },
 }
-Tasks = {}
-blatantFishCycleCount = 0
-needCast = false
-skip = false
-Events = {}
 
+-- Karena kode lain mengakses 'Config' (tanpa _G), kita buat alias
+-- agar jika ada yang memanggil 'Config' langsung, tetap mengarah ke _G.Config
+Config = _G.Config
+
+-- Variabel global lainnya
+Tasks = Tasks or {}
+blatantFishCycleCount = blatantFishCycleCount or 0
+needCast = needCast or false
+skip = skip or false
+Events = Events or {}
+
+-- ============================================================
+-- SAFE FIRE (Optimized dengan validasi)
+-- ============================================================
 function safeFire(func)
+    if type(func) ~= "function" then
+        warn("[safeFire] Invalid function argument")
+        return
+    end
     task.spawn(function()
         pcall(func)
     end)
 end
 
--- sleitnick_net often exposes RF/* as RemoteEvent; use FireServer in that case.
+-- ============================================================
+-- CALL REMOTE SERVER (Simplified & Optimized)
+-- ============================================================
 function CallRemoteServer(remote, ...)
     if not remote then return false end
-    local ok
+
+    local args = { ... }
+
+    -- Deteksi tipe remote dan panggil method yang sesuai
     if remote:IsA("RemoteFunction") then
-        ok = select(1, pcall(function(...)
-            remote:InvokeServer(...)
-        end, ...))
+        local ok, result = pcall(remote.InvokeServer, remote, unpack(args))
+        return ok, result
     elseif remote:IsA("RemoteEvent") then
-        ok = select(1, pcall(function(...)
-            remote:FireServer(...)
-        end, ...))
+        local ok = pcall(remote.FireServer, remote, unpack(args))
+        return ok
     else
-        ok = select(1, pcall(function(...)
-            remote:InvokeServer(...)
-        end, ...))
-        if not ok then
-            ok = select(1, pcall(function(...)
-                remote:FireServer(...)
-            end, ...))
+        -- Fallback: coba InvokeServer, lalu FireServer jika gagal
+        local ok, result = pcall(remote.InvokeServer, remote, unpack(args))
+        if ok then
+            return true, result
         end
+        -- Jika InvokeServer gagal, coba FireServer
+        ok = pcall(remote.FireServer, remote, unpack(args))
+        return ok
     end
-    return ok
 end
 
+-- ============================================================
+-- EVENTS & SERVICES
+-- ============================================================
 Events.equip = GetServerRemote("RF/EquipToolFromHotbar")
 Events.CancelFishingInputs = GetServerRemote("RF/CancelFishingInputs")
 Events.charge = GetServerRemote("RF/ChargeFishingRod")
 Events.minigame = GetServerRemote("RF/RequestFishingMinigameStarted")
 Events.UpdateAutoFishingState = GetServerRemote("RF/UpdateAutoFishingState")
 
+-- Services (tetap global untuk kompatibilitas)
 TweenService = game:GetService("TweenService")
 UserInputService = game:GetService("UserInputService")
 RunService = game:GetService("RunService")
@@ -213,16 +237,16 @@ HttpService = game:GetService("HttpService")
 Lighting = game:GetService("Lighting")
 Terrain = workspace:FindFirstChildOfClass("Terrain")
 
-
-
--- Performance Optimization: Data Cache System
+-- ============================================================
+-- DATA CACHE SYSTEM
+-- ============================================================
 DataCache = {
     equipped = nil,
     rods = nil,
     inventory = nil,
     enchantStones = nil,
     lastUpdate = 0,
-    cacheDuration = 3
+    cacheDuration = 3,
 }
 
 function DataCache:Get(key)
