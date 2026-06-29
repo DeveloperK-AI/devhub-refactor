@@ -491,32 +491,41 @@ host.CharacterAdded:Connect(function()
     applyZoom()
 end)
 
+-- ============================================================
+-- REPLICATION & DATA
+-- ============================================================
 ReplicatedStorage = game:GetService("ReplicatedStorage")
 RunService = game:GetService("RunService")
+
 -- Net already initialized
 Replion = require(ReplicatedStorage.Packages.Replion)
 FishingController = require(ReplicatedStorage.Controllers.FishingController)
 ItemUtility = require(ReplicatedStorage.Shared.ItemUtility)
 VendorUtility = require(ReplicatedStorage.Shared.VendorUtility)
- Data = Replion.Client:WaitReplion("Data")
- Client = require(ReplicatedStorage.Packages.Replion).Client
- dataStore = Client:WaitReplion("Data")
- Items = ReplicatedStorage:WaitForChild("Items")
- Players = game:GetService("Players")
- LocalPlayer = Players.LocalPlayer
- NetService = Net
- sellAllItems = SellItem
- enchan = REAltar
- oxygenRemote = UpdateOxygen
- radar = UpdateRadar
- autoon = AutoEnabled
- equipTool = REEquip
- CoreGui = game:GetService("CoreGui")
- tradeFunc = InitiateTrade
- RETextNotification = RENotify
- ItemUtility = require(ReplicatedStorage.Shared.ItemUtility)
 
+Data = Replion.Client:WaitReplion("Data")
+Client = require(ReplicatedStorage.Packages.Replion).Client
+dataStore = Client:WaitReplion("Data")
+Items = ReplicatedStorage:WaitForChild("Items")
+Players = game:GetService("Players")
+LocalPlayer = Players.LocalPlayer
+NetService = Net
 
+-- Alias untuk remote
+sellAllItems = SellItem
+enchan = REAltar
+oxygenRemote = UpdateOxygen
+radar = UpdateRadar
+autoon = AutoEnabled
+equipTool = REEquip
+CoreGui = game:GetService("CoreGui")
+tradeFunc = InitiateTrade
+RETextNotification = RENotify
+ItemUtility = require(ReplicatedStorage.Shared.ItemUtility)
+
+-- ============================================================
+-- RE TABLE (Remote Events Wrapper)
+-- ============================================================
 RE = {
     FavoriteItem = REFav,
     FavoriteStateChanged = REFavChg,
@@ -525,26 +534,31 @@ RE = {
     EquipItem = REEquipItem,
     ActivateAltar = REAltar,
     EquipTool = REEquip,
-    OpenPirateChest = PirateChest
+    OpenPirateChest = PirateChest,
 }
 
+
+-- Remote aliases untuk enchant
 equipItemRemote = RE.EquipItem or REEquipItem
 equipToolRemote = RE.EquipTool or REEquip
 activateAltarRemote = RE.ActivateAltar or REAltar
 
+-- ============================================================
+-- STATE & PATCHING FISHING CONTROLLER
+-- ============================================================
 st = {
     canFish = true,
 }
 
-blockedFunctions = {
+local blockedFunctions = {
     "OnCooldown",
 }
 
 function patchFishingController()
-     fishingModule = ReplicatedStorage.Controllers:FindFirstChild("FishingController")
+    local fishingModule = ReplicatedStorage.Controllers:FindFirstChild("FishingController")
     if not fishingModule then return end
 
-     ok, FC = pcall(require, fishingModule)
+    local ok, FC = pcall(require, fishingModule)
     if not ok or type(FC) ~= "table" then return end
 
     for key, fn in pairs(FC) do
@@ -554,7 +568,6 @@ function patchFishingController()
             end
         end
     end
-
 end
 
 patchFishingController()
