@@ -572,34 +572,17 @@ end
 
 patchFishingController()
 
--- ============================================================
--- ULTRA BLATANT 3N (FishingController Stub)
--- ============================================================
+-- Ultra Blatant 3N (moons.lua): simpan fungsi asli FishingController, stub di PC + mobile
 local origUB3N_RequestChargeFishingRod, origUB3N_SendFishingRequestToServer
-
-local function backupFishingControllerFunctions()
-    local ok1, val1 = pcall(function()
-        return FishingController.RequestChargeFishingRod
-    end)
-    local ok2, val2 = pcall(function()
-        return FishingController.SendFishingRequestToServer
-    end)
-    if ok1 then origUB3N_RequestChargeFishingRod = val1 end
-    if ok2 then origUB3N_SendFishingRequestToServer = val2 end
-
-    if not origUB3N_RequestChargeFishingRod or not origUB3N_SendFishingRequestToServer then
-        warn("[UltraBlatant] Failed to backup FishingController functions. Stub may not work.")
-    end
-end
-
-backupFishingControllerFunctions()
+pcall(function()
+    origUB3N_RequestChargeFishingRod = FishingController.RequestChargeFishingRod
+    origUB3N_SendFishingRequestToServer = FishingController.SendFishingRequestToServer
+end)
 
 function applyUltraBlatant3NFishingControllerStub(enabled)
     if not origUB3N_RequestChargeFishingRod or not origUB3N_SendFishingRequestToServer then
-        warn("[UltraBlatant] Cannot apply stub: original functions not backed up.")
         return
     end
-
     if enabled then
         FishingController.RequestChargeFishingRod = function(self, ...) end
         FishingController.SendFishingRequestToServer = function(self, ...) end
