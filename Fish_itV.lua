@@ -468,166 +468,6 @@ ShopTab:CreateButton({
     end,
 })
 
--- ============================================================
--- MORE TABS
--- ============================================================
--- ============================================================
--- TELEPORT WITH FLY (Integrasi dari kode yang diberikan)
--- ============================================================
-local function teleportWithFly(targetPosition, cancelCheck)
-    -- Pastikan targetPosition adalah Vector3
-    if typeof(targetPosition) == "CFrame" then
-        targetPosition = targetPosition.Position
-    end
-    if typeof(targetPosition) ~= "Vector3" then
-        warn("[Teleport] Invalid target position")
-        return false
-    end
-
-    local character = Player.Character
-    local hrp = character and character:FindFirstChild("HumanoidRootPart")
-    if not hrp then
-        warn("[Teleport] Character or HumanoidRootPart not found")
-        return false
-    end
-
-    -- Unsit if seated
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
-    if humanoid and humanoid.Sit then
-        humanoid.Sit = false
-        task.wait(0.15)
-    end
-
-    -- Fly speed (default 50)
-    local flySpeed = 50
-    if player_funcs and player_funcs.fly_config then
-        flySpeed = player_funcs.fly_config.fly_speed or 50
-    end
-
-    -- Enable fly if not already enabled
-    local function safeEnableFly()
-        if not player_funcs or not player_funcs.fly_config then return end
-        if player_funcs.fly_config.flying then return end
-        if player_funcs.__components and player_funcs.__components.fly_toggle then
-            player_funcs.__components.fly_toggle:Set(true)
-        elseif player_funcs.__function and player_funcs.__function.fly then
-            player_funcs.__function.fly(true)
-        end
-        task.wait(0.15)
-    end
-    safeEnableFly()
-
-    -- Store original CanCollide and set to false for all parts
-    local originalCollide = {}
-    local parts = {}
-    for _, part in pairs(character:GetDescendants()) do
-        if part:IsA("BasePart") then
-            originalCollide[part] = part.CanCollide
-            part.CanCollide = false
-            table.insert(parts, part)
-        end
-    end
-
-    -- Get or create BodyVelocity
-    local bodyVel = hrp:FindFirstChild("BodyVelocity")
-    if not bodyVel then
-        bodyVel = Instance.new("BodyVelocity")
-        bodyVel.Name = "FlyTeleportVelocity"
-        bodyVel.maxForce = Vector3.new(9e4, 9e4, 9e4)
-        bodyVel.Parent = hrp
-    end
-
-    local currentPos = hrp.Position
-    local aborted = false
-
-    local function checkAbort()
-        if cancelCheck and cancelCheck() then
-            aborted = true
-            return true
-        end
-        return false
-    end
-
-    -- Fly horizontal
-    local horizTarget = Vector3.new(targetPosition.X, hrp.Position.Y, targetPosition.Z)
-    local horizDist = (horizTarget - hrp.Position).Magnitude
-    local noclipTick = 0
-    while horizDist > 5 do
-        if not hrp or not hrp.Parent then break end
-        if checkAbort() then break end
-
-        noclipTick = noclipTick + 1
-        if noclipTick % 5 == 0 then
-            for _, part in ipairs(parts) do
-                if part and part.Parent then
-                    part.CanCollide = false
-                end
-            end
-        end
-
-        currentPos = hrp.Position
-        local dir = (horizTarget - currentPos).Unit
-        bodyVel.velocity = dir * flySpeed
-        horizDist = (horizTarget - currentPos).Magnitude
-        task.wait()
-    end
-
-    -- Fly down to target
-    local distToTarget = (targetPosition - hrp.Position).Magnitude
-    while distToTarget > 5 do
-        if not hrp or not hrp.Parent then break end
-        if checkAbort() then break end
-
-        noclipTick = noclipTick + 1
-        if noclipTick % 5 == 0 then
-            for _, part in ipairs(parts) do
-                if part and part.Parent then
-                    part.CanCollide = false
-                end
-            end
-        end
-
-        currentPos = hrp.Position
-        local dir = (targetPosition - currentPos).Unit
-        bodyVel.velocity = dir * flySpeed
-        distToTarget = (targetPosition - currentPos).Magnitude
-        task.wait()
-    end
-
-    -- Stop moving smoothly
-    bodyVel.velocity = Vector3.zero
-    if hrp and hrp.Parent then
-        hrp.AssemblyLinearVelocity = Vector3.zero
-        hrp.AssemblyAngularVelocity = Vector3.zero
-        hrp.AssemblyLinearVelocity = Vector3.new(0, -5, 0)
-    end
-
-    -- Clean up temp velocity if created
-    local isFlyToggleVel = player_funcs and player_funcs.fly_config and bodyVel == player_funcs.fly_config.body_velocity
-    if bodyVel.Name == "FlyTeleportVelocity" and not isFlyToggleVel then
-        bodyVel:Destroy()
-    end
-
-    -- Restore CanCollide
-    for part, original in pairs(originalCollide) do
-        if part and part.Parent then
-            part.CanCollide = original
-        end
-    end
-
-    if aborted then
-        if player_funcs and player_funcs.fly_config then
-            if player_funcs.__components and player_funcs.__components.fly_toggle then
-                player_funcs.__components.fly_toggle:Set(false)
-            elseif player_funcs.__function and player_funcs.__function.fly then
-                player_funcs.__function.fly(false)
-            end
-        end
-    end
-
-    return not aborted
-end
-
 TeleportTab = Window:CreateTab({
     Name = "Teleport",
     Icon = "rbxassetid://128755575520135",
@@ -6786,24 +6626,43 @@ PlayerTab:CreateToggle({
     end,
 })
 
--- FlyGui V3 (perbaiki Notify → Window:Notify)
+-- ============================================================
+-- FLY GUI V3 (Refactored - Aman)
+-- ============================================================
 PlayerTab:CreateButton({
     Name = "FlyGui V3",
     Icon = "rbxassetid://7733920644",
     Callback = function()
         local success, err = pcall(function()
-            loadstring(game:HttpGet("https://raw.githubusercontent.com/XNEOFF/FlyGuiV3/main/FlyGuiV3.txt"))()
+            local url = "https://raw.githubusercontent.com/XNEOFF/FlyGuiV3/main/FlyGuiV3.txt"
+            local content = game:HttpGet(url)
+            if content and content ~= "" then
+                local fn = loadstring(content)
+                if type(fn) == "function" then
+                    fn()
+                    if Window and Window.Notify then
+                        Window:Notify({
+                            Title = "Fly GUI",
+                            Content = "Fly GUI Activated!",
+                            Duration = 3,
+                        })
+                    end
+                else
+                    warn("[FlyGui] loadstring returned nil, content may be invalid")
+                end
+            else
+                warn("[FlyGui] Empty content from URL")
+            end
         end)
-        if success then
+        if not success then
+            warn("[FlyGui] Failed to load:", err)
             if Window and Window.Notify then
                 Window:Notify({
-                    Title = "Fly GUI",
-                    Content = "Fly GUI Activated!",
+                    Title = "Error",
+                    Content = "Failed to load Fly GUI.",
                     Duration = 3,
                 })
             end
-        else
-            warn("[FlyGui] Failed to load:", err)
         end
     end,
 })
