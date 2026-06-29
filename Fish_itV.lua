@@ -7027,174 +7027,111 @@ ShopTab:CreateButton({
 })
 
 
--- ============================================================
--- BUY WEATHER EVENT (Auto-Buy)
--- ============================================================
 ShopTab:CreateSection({ Name = "Buy Weather Event", Icon = "rbxassetid://7733955511" })
 
--- ============================================================
--- CONFIGURATION
--- ============================================================
-local WEATHER_DATA = {
-    Wind = { display = "Windy", price = 10000 },
-    Cloudy = { display = "Cloudy", price = 20000 },
-    Snow = { display = "Snow", price = 15000 },
-    Storm = { display = "Stormy", price = 35000 },
-    Radiant = { display = "Radiant", price = 50000 },
-    ["Shark Hunt"] = { display = "Shark Hunt", price = 300000 },
-	["Treasure Hunt"] = { display = "Treasure Hunt", price = 1000000 },
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RFPurchaseWeatherEvent = BuyWeather
+
+-- Data cuaca
+local weathers = {
+    ["Wind"] = "Wind",
+    ["Cloudy"] = "Cloudy",
+    ["Snow"] = "Snow",
+    ["Storm"] = "Storm",
+    ["Radiant"] = "Radiant",
+    ["Shark Hunt"] = "Shark Hunt"
 }
 
--- Build display names from data
-local weatherDisplayNames = {}
-local weatherKeyMap = {}
-for key, data in pairs(WEATHER_DATA) do
-    local display = data.display .. " (" .. data.price .. " Coins)"
-    table.insert(weatherDisplayNames, display)
-    weatherKeyMap[display] = key
-end
-table.sort(weatherDisplayNames)
+-- Nama tampilan
+local weatherNames = {
+    "Windy (10k Coins)",
+    "Cloudy (20k Coins)",
+    "Snow (15k Coins)",
+    "Stormy (35k Coins)",
+    "Radiant (50k Coins)",
+    "Shark Hunt (300k Coins)"
+}
 
--- State
-local selectedWeathers = {}  -- display names yang dipilih
+-- Mapping nama → key internal
+local weatherKeyMap = {
+    ["Windy (10k Coins)"] = "Wind",
+    ["Cloudy (20k Coins)"] = "Cloudy",
+    ["Snow (15k Coins)"] = "Snow",
+    ["Stormy (35k Coins)"] = "Storm",
+    ["Radiant (50k Coins)"] = "Radiant",
+    ["Shark Hunt (300k Coins)"] = "Shark Hunt"
+}
+
+local selectedWeathers = {}
 local autoBuyRunning = false
-local autoBuyThread = nil
 
--- ============================================================
--- REMOTE (dengan validasi)
--- ============================================================
-local PurchaseWeatherRemote = BuyWeather  -- dari global
-if not PurchaseWeatherRemote then
-    warn("[Weather] BuyWeather remote not found! Auto-buy will not work.")
-end
-
--- ============================================================
--- HELPER: Notifikasi aman
--- ============================================================
-local function notifyWeather(title: string, content: string, duration: number?)
-    duration = duration or 3
-    if Window and Window.Notify then
-        Window:Notify({
-            Title = title,
-            Content = content,
-            Duration = duration,
-        })
-    else
-        print("[Weather] " .. title .. ": " .. content)
-    end
-end
-
--- ============================================================
--- UI: MultiDropdown
--- ============================================================
 ShopTab:CreateMultiDropdown({
-    Name = "Select Weather Events",
-    Items = weatherDisplayNames,
+	Name = "Select Weather Events",
+	Items = weatherNames,
     Default = selectedWeathers,
     Callback = function(values)
-        selectedWeathers = values or {}
-        print("[Weather] Selected:", table.concat(selectedWeathers, ", "))
-    end,
+        selectedWeathers = values
+        print("Selected:", table.concat(values, ", "))
+    end
 })
 
--- ============================================================
--- UI: Auto Buy Toggle
--- ============================================================
+
 ShopTab:CreateToggle({
-    Name = "Auto Buy Selected Weathers",
-    SubText = "Continuously purchase all selected weather events while ON",
-    Default = false,
-    Callback = function(state)
+	Name = "Auto Buy Selected Weathers",
+	SubText = "Continuously purchase all selected weather events while ON",
+	Default = false,
+ Callback = function(state)
         autoBuyRunning = state
 
         if state then
-            -- Validasi: minimal 1 item dipilih
             if #selectedWeathers == 0 then
-                notifyWeather("⚠️ No Selection", "Please select at least one weather event before enabling.", 3)
+                Window:Notify({
+                    Title = "⚠️ No Selection",
+                    Content = "Please select at least one weather event before enabling.",
+                    Duration = 3
+                })
                 autoBuyRunning = false
                 return
             end
 
-            -- Validasi: remote tersedia
-            if not PurchaseWeatherRemote then
-                notifyWeather("❌ Error", "BuyWeather remote not found! Cannot auto-buy.", 4)
-                autoBuyRunning = false
-                return
-            end
+            Window:Notify({
+                Title = "🌤️ Auto Buy Enabled",
+                Content = "Auto-purchase started. It will keep buying until turned off.",
+                Duration = 3
+            })
 
-            notifyWeather("🌤️ Auto Buy Enabled", "Auto-purchase started for " .. #selectedWeathers .. " event(s).", 3)
-
-            -- Hentikan thread lama jika ada
-            if autoBuyThread then
-                pcall(task.cancel, autoBuyThread)
-                autoBuyThread = nil
-            end
-
-            -- Jalankan loop
-            autoBuyThread = task.spawn(function()
-                local successCount = 0
-                local failCount = 0
-
+            -- Jalankan loop di thread terpisah
+            task.spawn(function()
                 while autoBuyRunning do
-                    for _, displayName in ipairs(selectedWeathers) do
-                        if not autoBuyRunning then break end
-
-                        local key = weatherKeyMap[displayName]
-                        if not key then
-                            warn("[Weather] Invalid display name:", displayName)
-                            failCount = failCount + 1
-                            continue
-                        end
-
-                        local weatherType = WEATHER_DATA[key]
-                        if not weatherType then
-                            warn("[Weather] Invalid weather key:", key)
-                            failCount = failCount + 1
-                            continue
-                        end
-
-                        -- Panggil remote dengan pcall
-                        local ok, err = pcall(function()
-                            PurchaseWeatherRemote:InvokeServer(key)
-                        end)
-
-                        if ok then
-                            successCount = successCount + 1
-                            print("[Weather] Purchased:", weatherType.display)
+                    for _, selected in ipairs(selectedWeathers) do
+                        local key = weatherKeyMap[selected]
+                        if key and weathers[key] then
+                            local success, err = pcall(function()
+                                RFPurchaseWeatherEvent:InvokeServer(weathers[key])
+                            end)
                         else
-                            failCount = failCount + 1
-                            if failCount <= 3 then -- hanya log 3 error pertama
-                                warn("[Weather] Failed to purchase:", weatherType.display, err)
-                            end
+                            Window:Notify({
+                                Title = "⚠️ Invalid Weather",
+                                Content = "Invalid selection: " .. tostring(selected),
+                                Duration = 3
+                            })
                         end
-
-                        -- Delay antar pembelian (0.5 detik)
                         task.wait(0.5)
                     end
 
-                    -- Delay antar siklus (5 detik)
-                    if autoBuyRunning then
-                        task.wait(5)
-                    end
-                end
-
-                -- Log summary saat berhenti
-                if successCount > 0 or failCount > 0 then
-                    print("[Weather] Auto-buy stopped. Success:", successCount, "| Failed:", failCount)
+                    task.wait(5) -- Increased from 2s to 5s to reduce CPU usage
                 end
             end)
-
         else
-            -- Stop auto-buy
-            if autoBuyThread then
-                pcall(task.cancel, autoBuyThread)
-                autoBuyThread = nil
-            end
-
-            notifyWeather("🛑 Auto Buy Disabled", "Weather auto-purchase stopped.", 3)
+            Window:Notify({
+                Title = "🛑 Auto Buy Disabled",
+                Content = "Weather auto-purchase stopped.",
+                Duration = 3
+            })
         end
-    end,
+    end
 })
+
 
 -- ==================================================
 -- Merchant (copied/adapted from `source of wishub/Main.lua`)
