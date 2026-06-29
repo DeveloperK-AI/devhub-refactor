@@ -7054,6 +7054,8 @@ local DEFAULT_WEATHERS = {
     ["Storm"] = { Display = "Stormy (35k Coins)", Price = 35000 },
     ["Radiant"] = { Display = "Radiant (50k Coins)", Price = 50000 },
     ["Shark Hunt"] = { Display = "Shark Hunt (300k Coins)", Price = 300000 },
+    ["Treasure Hunt"] = { Display = "Treasure Hunt (1M Coins)", Price = 1000000 },
+
 }
 
 -- ============================================================
