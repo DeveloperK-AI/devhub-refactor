@@ -7027,242 +7027,110 @@ ShopTab:CreateButton({
 })
 
 
--- ============================================================
--- BUY WEATHER EVENT (Dinamis dari Server - Robust)
--- ============================================================
 ShopTab:CreateSection({ Name = "Buy Weather Event", Icon = "rbxassetid://7733955511" })
 
--- ============================================================
--- DEPENDENCIES
--- ============================================================
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RFPurchaseWeatherEvent = BuyWeather  -- RemoteFunction/Event
+local RFPurchaseWeatherEvent = BuyWeather
 
--- ============================================================
--- DEFAULT WEATHER DATA (Fallback jika server tidak tersedia)
--- ============================================================
-local DEFAULT_WEATHERS = {
-    ["Wind"] = { Display = "Windy (10k Coins)", Price = 10000 },
-    ["Cloudy"] = { Display = "Cloudy (20k Coins)", Price = 20000 },
-    ["Snow"] = { Display = "Snow (15k Coins)", Price = 15000 },
-    ["Storm"] = { Display = "Stormy (35k Coins)", Price = 35000 },
-    ["Radiant"] = { Display = "Radiant (50k Coins)", Price = 50000 },
-    ["Shark Hunt"] = { Display = "Shark Hunt (300k Coins)", Price = 300000 },
+-- Data cuaca
+local weathers = {
+    ["Wind"] = "Wind",
+    ["Cloudy"] = "Cloudy",
+    ["Snow"] = "Snow",
+    ["Storm"] = "Storm",
+    ["Radiant"] = "Radiant",
+    ["Shark Hunt"] = "Shark Hunt"
 }
 
--- ============================================================
--- STATE
--- ============================================================
-local WeatherData = {}
-local WeatherDisplayNames = {}
-local WeatherKeyMap = {}
+-- Nama tampilan
+local weatherNames = {
+    "Windy (10k Coins)",
+    "Cloudy (20k Coins)",
+    "Snow (15k Coins)",
+    "Stormy (35k Coins)",
+    "Radiant (50k Coins)",
+    "Shark Hunt (300k Coins)"
+}
+
+-- Mapping nama → key internal
+local weatherKeyMap = {
+    ["Windy (10k Coins)"] = "Wind",
+    ["Cloudy (20k Coins)"] = "Cloudy",
+    ["Snow (15k Coins)"] = "Snow",
+    ["Stormy (35k Coins)"] = "Storm",
+    ["Radiant (50k Coins)"] = "Radiant",
+    ["Shark Hunt (300k Coins)"] = "Shark Hunt"
+}
+
 local selectedWeathers = {}
 local autoBuyRunning = false
-local autoBuyThread = nil
 
--- ============================================================
--- LOAD WEATHER FROM SERVER (Dengan Fallback)
--- ============================================================
-local function loadWeatherData()
-    local data = nil
-    local success = false
-
-    -- Coba dari Shared.WeatherData
-    local ok, module = pcall(function()
-        return require(ReplicatedStorage:WaitForChild("Shared", 2):WaitForChild("WeatherData", 2))
-    end)
-    if ok and type(module) == "table" and next(module) then
-        data = module
-        success = true
-        print("[Weather] Loaded from Shared.WeatherData")
+ShopTab:CreateMultiDropdown({
+	Name = "Select Weather Events",
+	Items = weatherNames,
+    Default = selectedWeathers,
+    Callback = function(values)
+        selectedWeathers = values
+        print("Selected:", table.concat(values, ", "))
     end
+})
 
-    -- Jika gagal, coba dari folder Weathers
-    if not success then
-        local weatherFolder = ReplicatedStorage:FindFirstChild("Weathers")
-        if weatherFolder then
-            local tempData = {}
-            for _, child in ipairs(weatherFolder:GetChildren()) do
-                if child:IsA("ModuleScript") then
-                    local ok2, m = pcall(require, child)
-                    if ok2 and m and m.Key and m.Display then
-                        tempData[m.Key] = {
-                            Display = m.Display,
-                            Price = m.Price or 0,
-                        }
-                    end
-                end
+
+ShopTab:CreateToggle({
+	Name = "Auto Buy Selected Weathers",
+	SubText = "Continuously purchase all selected weather events while ON",
+	Default = false,
+ Callback = function(state)
+        autoBuyRunning = state
+
+        if state then
+            if #selectedWeathers == 0 then
+                Window:Notify({
+                    Title = "⚠️ No Selection",
+                    Content = "Please select at least one weather event before enabling.",
+                    Duration = 3
+                })
+                autoBuyRunning = false
+                return
             end
-            if next(tempData) then
-                data = tempData
-                success = true
-                print("[Weather] Loaded from Weathers folder")
-            end
-        end
-    end
 
-    -- Jika semua gagal, pakai default
-    if not success then
-        warn("[Weather] No server data found, using default list")
-        data = DEFAULT_WEATHERS
-    end
-
-    return data
-end
-
--- ============================================================
--- REFRESH WEATHER LIST
--- ============================================================
-local function refreshWeatherList()
-    WeatherData = loadWeatherData()
-    WeatherDisplayNames = {}
-    WeatherKeyMap = {}
-
-    for key, info in pairs(WeatherData) do
-        local display = info.Display or key
-        table.insert(WeatherDisplayNames, display)
-        WeatherKeyMap[display] = key
-    end
-
-    table.sort(WeatherDisplayNames)
-    print("[Weather] Refreshed:", #WeatherDisplayNames, "weather types")
-end
-
--- ============================================================
--- INISIALISASI
--- ============================================================
-refreshWeatherList()
-
--- ============================================================
--- UI ELEMENTS (Dibuat hanya jika ShopTab tersedia)
--- ============================================================
-local WeatherDropdown = nil
-local WeatherToggle = nil
-
--- Cek apakah ShopTab masih ada (untuk keamanan)
-if ShopTab then
-    WeatherDropdown = ShopTab:CreateMultiDropdown({
-        Name = "Select Weather Events",
-        Items = WeatherDisplayNames,
-        Default = selectedWeathers,
-        Callback = function(values)
-            selectedWeathers = values
-            print("[Weather] Selected:", table.concat(values, ", "))
-        end,
-    })
-
-    -- Tombol Refresh
-    ShopTab:CreateButton({
-        Name = "🔄 Refresh Weather List",
-        SubText = "Update weather list from server",
-        Callback = function()
-            refreshWeatherList()
-            if WeatherDropdown and WeatherDropdown.Refresh then
-                WeatherDropdown:Refresh(WeatherDisplayNames)
-            end
             Window:Notify({
-                Title = "Weather List",
-                Content = "Updated! " .. #WeatherDisplayNames .. " weather events available.",
-                Duration = 2,
+                Title = "🌤️ Auto Buy Enabled",
+                Content = "Auto-purchase started. It will keep buying until turned off.",
+                Duration = 3
             })
-        end,
-    })
-else
-    warn("[Weather] ShopTab not available, UI not created")
-end
 
--- ============================================================
--- AUTO BUY LOGIC
--- ============================================================
-local function startAutoBuy()
-    if autoBuyRunning then return end
-    if #selectedWeathers == 0 then
-        if Window then
-            Window:Notify({
-                Title = "⚠️ No Selection",
-                Content = "Please select at least one weather event before enabling.",
-                Duration = 3,
-            })
-        end
-        return
-    end
-
-    autoBuyRunning = true
-    if Window then
-        Window:Notify({
-            Title = "🌤️ Auto Buy Enabled",
-            Content = "Auto-purchase started. It will keep buying until turned off.",
-            Duration = 3,
-        })
-    end
-
-    autoBuyThread = task.spawn(function()
-        while autoBuyRunning do
-            for _, selectedDisplay in ipairs(selectedWeathers) do
-                local key = WeatherKeyMap[selectedDisplay]
-                if key and WeatherData[key] then
-                    if RFPurchaseWeatherEvent then
-                        local ok = pcall(function()
-                            RFPurchaseWeatherEvent:InvokeServer(key)
-                        end)
-                        if not ok then
-                            warn("[Weather] Failed to purchase:", selectedDisplay)
+            -- Jalankan loop di thread terpisah
+            task.spawn(function()
+                while autoBuyRunning do
+                    for _, selected in ipairs(selectedWeathers) do
+                        local key = weatherKeyMap[selected]
+                        if key and weathers[key] then
+                            local success, err = pcall(function()
+                                RFPurchaseWeatherEvent:InvokeServer(weathers[key])
+                            end)
+                        else
+                            Window:Notify({
+                                Title = "⚠️ Invalid Weather",
+                                Content = "Invalid selection: " .. tostring(selected),
+                                Duration = 3
+                            })
                         end
-                    else
-                        warn("[Weather] RFPurchaseWeatherEvent is nil!")
+                        task.wait(0.5)
                     end
-                else
-                    warn("[Weather] Invalid weather key for:", selectedDisplay)
+
+                    task.wait(5) -- Increased from 2s to 5s to reduce CPU usage
                 end
-                task.wait(0.5)
-            end
-            task.wait(5)
+            end)
+        else
+            Window:Notify({
+                Title = "🛑 Auto Buy Disabled",
+                Content = "Weather auto-purchase stopped.",
+                Duration = 3
+            })
         end
-    end)
-end
-
-local function stopAutoBuy()
-    autoBuyRunning = false
-    if autoBuyThread then
-        task.cancel(autoBuyThread)
-        autoBuyThread = nil
     end
-    if Window then
-        Window:Notify({
-            Title = "🛑 Auto Buy Disabled",
-            Content = "Weather auto-purchase stopped.",
-            Duration = 3,
-        })
-    end
-end
-
--- ============================================================
--- TOGGLE AUTO BUY
--- ============================================================
-if ShopTab then
-    WeatherToggle = ShopTab:CreateToggle({
-        Name = "Auto Buy Selected Weathers",
-        SubText = "Continuously purchase all selected weather events while ON",
-        Default = false,
-        Callback = function(state)
-            if state then
-                startAutoBuy()
-            else
-                stopAutoBuy()
-            end
-        end,
-    })
-end
-
--- ============================================================
--- CLEANUP
--- ============================================================
-local function cleanupWeather()
-    stopAutoBuy()
-end
-_G._cleanupWeather = cleanupWeather
-
-print("[Weather] System initialized with", #WeatherDisplayNames, "weather types")
+})
 
 
 -- ==================================================
