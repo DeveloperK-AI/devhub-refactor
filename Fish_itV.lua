@@ -7666,52 +7666,6 @@ task.spawn(function()
         folder.ChildRemoved:Connect(refresh)
     end
 end)
-
--- Tombol Teleport
-TeleportTab:CreateButton({
-    Name = "Teleport to Island",
-    Icon = "rbxassetid://7733920644",
-    Callback = function()
-        local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
-        if not hrp then
-            Window:Notify({
-                Title = "Error",
-                Content = "Character not found!",
-                Duration = 2,
-            })
-            return
-        end
-
-        local cf = resolveIslandCFrame(SelectedIsland)
-        if not cf then
-            Window:Notify({
-                Title = "Error",
-                Content = "Invalid island selected!",
-                Duration = 2,
-            })
-            return
-        end
-
-        -- Matikan lock jika aktif
-        if LockActive then
-            stopLock()
-        end
-
-        local success = teleportWithRetry(cf, 3, 0.3)
-        if success then
-            Window:Notify({
-                Title = "Teleport",
-                Content = "Teleported to " .. SelectedIsland,
-                Duration = 2,
-            })
-        else
-            Window:Notify({
-                Title = "Teleport Failed",
-                Content = "Could not reach destination. Try using Lock.",
-                Duration = 3,
-            })
-        end
-    end,
 })
 
 -- Toggle Lock Position
