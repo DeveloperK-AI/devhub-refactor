@@ -275,7 +275,8 @@ end
 -- ============================================================
 -- UI LIBRARY & WINDOW
 -- ============================================================
-local VoraLib = (function()
+local VoraLib = nil
+local ok, err = pcall(function()
 --!strict
 --[[
     DeveloperK | COMMUNITY
@@ -2482,16 +2483,34 @@ function VoraLib:Destroy()
         or  CoreGui:FindFirstChild("VoraHub")
     if target then target:Destroy() end
 end
-
 return VoraLib
-if not VoraLib then
-    error("[Main] VoraLib is nil! Library failed to load.")
+end)
+
+if not ok then
+    error("[Main] Gagal memuat VoraLib: " .. tostring(err))
+else
+    VoraLib = err  -- hasil return dari pcall
 end
 
+if not VoraLib then
+    error("[Main] VoraLib is nil! Library not loaded.")
+end
+
+print("[Main] VoraLib loaded successfully!")
+
 -- ============================================================
--- CREATE WINDOW (Lanjutkan kode Main.lua seperti biasa)
+-- CREATE WINDOW
 -- ============================================================
-Window = VoraLib:CreateWindow({ Name = "Vora Hub", Intro = true })
+local windowOk, windowErr = pcall(function()
+    Window = VoraLib:CreateWindow({ Name = "Vora Hub", Intro = true })
+end)
+
+if not windowOk then
+    error("[Main] Gagal membuat Window: " .. tostring(windowErr))
+end
+
+print("[Main] Window created successfully!")
+
 
 -- ============================================================
 -- TABS
