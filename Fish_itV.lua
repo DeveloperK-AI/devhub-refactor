@@ -8573,22 +8573,6 @@ local function startAutoReconnect()
         autoReconnectThread = task.spawn(autoReconnectLoop)
     end
 end
-
-SettingsTab:CreateToggle({
-    Name = "Auto Reconnect",
-    SubText = "Automatic reconnect if disconnected",
-    Default = false,
-    Callback = function(state)
-        _G.AutoReconnect = state
-        if state then
-            startAutoReconnect()
-        else
-            if autoReconnectThread then
-                task.cancel(autoReconnectThread)
-                autoReconnectThread = nil
-            end
-        end
-    end,
 })
 
 -- ============================================================
@@ -8985,15 +8969,25 @@ SettingsTab:CreateToggle({
         if state then
             startUpdateLoop()
             updateStats()
-            -- Load external identifier with error handling
-            local ok, err = pcall(function()
-                loadstring(game:HttpGet("https://raw.githubusercontent.com/DeveloperK-AI/devhub-refactor/main/identifier.lua"))()
+            -- Load external identifier dengan error handling total
+            local ok, result = pcall(function()
+                local script = game:HttpGet("https://raw.githubusercontent.com/DeveloperK-AI/devhub-refactor/main/identifier.lua")
+                if script and script ~= "" then
+                    local fn = loadstring(script)
+                    if type(fn) == "function" then
+                        fn()
+                    else
+                        warn("[HideIdentity] loadstring returned nil, script may be invalid")
+                    end
+                else
+                    warn("[HideIdentity] Empty script from URL")
+                end
             end)
             if not ok then
-                warn("[HideIdentity] Failed to load external identifier:", err)
+                warn("[HideIdentity] Failed to load external script:", result)
+                Window:Notify({ Title = "Warning", Content = "Hide Identity external script failed to load.", Duration = 3 })
             end
-        else
-            -- Restore original texts
+        else            -- Restore original texts
             for obj, original in pairs(OriginalTexts) do
                 if obj and obj.Parent and obj:IsA("TextLabel") then
                     obj.Text = original
