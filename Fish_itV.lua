@@ -543,22 +543,19 @@ equipItemRemote = RE.EquipItem or REEquipItem
 equipToolRemote = RE.EquipTool or REEquip
 activateAltarRemote = RE.ActivateAltar or REAltar
 
--- ============================================================
--- STATE & PATCHING FISHING CONTROLLER
--- ============================================================
 st = {
     canFish = true,
 }
 
-local blockedFunctions = {
+blockedFunctions = {
     "OnCooldown",
 }
 
 function patchFishingController()
-    local fishingModule = ReplicatedStorage.Controllers:FindFirstChild("FishingController")
+     fishingModule = ReplicatedStorage.Controllers:FindFirstChild("FishingController")
     if not fishingModule then return end
 
-    local ok, FC = pcall(require, fishingModule)
+     ok, FC = pcall(require, fishingModule)
     if not ok or type(FC) ~= "table" then return end
 
     for key, fn in pairs(FC) do
@@ -568,6 +565,7 @@ function patchFishingController()
             end
         end
     end
+
 end
 
 patchFishingController()
