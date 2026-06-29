@@ -222,7 +222,7 @@ function DataCache:Invalidate()
     self.enchantStones = nil
 end
 
-local VoraLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/juansyahrz17-prog/vorahub/refs/heads/main/lib.lua"))()
+local VoraLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/DeveloperK-AI/devhub-refactor/main/libnew.lua"))()
 
  Window = VoraLib:CreateWindow({
 	Name = "Vora Hub",
