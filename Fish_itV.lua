@@ -123,460 +123,6 @@ REDialogueEnded      = RE("DialogueEnded")
 RFCreateTranscendedStone = RF("CreateTranscendedStone")
 EquipBait           = RE("EquipBait")
 
--- ============================================================
--- PETS DATA (dari module Pets)
--- ============================================================
--- Data ini berisi konfigurasi hewan peliharaan (pets) dalam game.
--- Diambil dari module Shared.Pets, disimpan ke _G.PetsData
--- agar bisa diakses dari mana saja.
-
-do
-    local v1 = game:GetService("ReplicatedStorage")
-    local v2 = require(v1.Shared.UserPriority)
-    require(v1.Types.Modifiers)  -- hanya untuk load, tidak digunakan langsung
-
-    -- Multiplier untuk test session (0.1) vs production (1)
-    local v3 = v2:IsValidTestSession() and 0.1 or 1
-
-    -- Interval cast universal: 2 detik (dikalikan v3 untuk test session scaling)
-    local CAST_COOLDOWN = v3 * 2
-
-    -- Durasi reel per tier — proporsional, tier lebih tinggi reel lebih cepat
-    -- Semua pet kini enabled = true
-    local REEL_DURATION = {
-        [1] = v3 * 65,  -- Tier 1 (paling lambat)
-        [2] = v3 * 55,
-        [3] = v3 * 45,
-        [4] = v3 * 35,
-        [5] = v3 * 25,
-        [6] = v3 * 18,
-        [7] = v3 * 12,  -- Tier 7 (paling cepat)
-    }
-
-    -- Simpan ke global
-    _G.PetsData = {
-        ["Tabby Cat"] = {
-            TradeLocked  = true,
-            ModelName    = "Tabby Cat",
-            Downloadable = true,
-            SellPrice    = 250,
-            Data = {
-                Id          = 1,
-                Type        = "Pets",
-                Name        = "Tabby Cat",
-                Description = "A loyal fishing companion.",
-                Icon        = "rbxassetid://110533898909600",
-                Tier        = 1,
-            },
-            Perk = {
-                Type  = "Fishing",
-                Value = 1,
-            },
-            Modifiers = {
-                BaseLuck = 0.04,
-            },
-            PetFishing = {
-                Enabled              = true,
-                CastCooldownSeconds  = CAST_COOLDOWN,
-                ReelDurationSeconds  = REEL_DURATION[1],
-            },
-        },
-        ["Bunny"] = {
-            ModelName    = "Bunny",
-            Downloadable = true,
-            SellPrice    = 1000,
-            Data = {
-                Id          = 2,
-                Type        = "Pets",
-                Name        = "Bunny",
-                Description = "A lucky founder companion.",
-                Icon        = "",
-                Tier        = 3,
-            },
-            Perk = {
-                Type  = "Luck",
-                Value = 0.3,
-            },
-            Modifiers = {
-                BaseLuck = 0.3,
-            },
-            PetFishing = {
-                Enabled              = true,
-                CastCooldownSeconds  = CAST_COOLDOWN,
-                ReelDurationSeconds  = REEL_DURATION[3],
-            },
-        },
-        ["Otter"] = {
-            ModelName    = "Otter",
-            Downloadable = true,
-            SellPrice    = 1000,
-            Data = {
-                Id          = 3,
-                Type        = "Pets",
-                Name        = "Otter",
-                Description = "A quick founder companion.",
-                Icon        = "rbxassetid://124620947719787",
-                Tier        = 3,
-                Egg         = "Exclusive Egg",
-            },
-            Perk = {
-                Type  = "ReelSpeed",
-                Value = 0.18,
-            },
-            Modifiers = {
-                ReelMultiplier = 0.18,
-            },
-            PetFishing = {
-                Enabled              = true,
-                CastCooldownSeconds  = CAST_COOLDOWN,
-                ReelDurationSeconds  = REEL_DURATION[3],
-            },
-        },
-        ["Frog"] = {
-            ModelName    = "Frog",
-            Downloadable = true,
-            SellPrice    = 1000,
-            Data = {
-                Id          = 4,
-                Type        = "Pets",
-                Name        = "Frog",
-                Description = "A very lucky founder companion.",
-                Icon        = "rbxassetid://81698994110892",
-                Tier        = 4,
-                Egg         = "Exclusive Egg",
-            },
-            Perk = {
-                Type  = "Luck",
-                Value = 0.7,
-            },
-            Modifiers = {
-                BaseLuck = 0.7,
-            },
-            PetFishing = {
-                Enabled              = true,
-                CastCooldownSeconds  = CAST_COOLDOWN,
-                ReelDurationSeconds  = REEL_DURATION[4],
-            },
-        },
-        ["Cow"] = {
-            ModelName    = "Cow",
-            Downloadable = true,
-            SellPrice    = 1000,
-            Data = {
-                Id          = 5,
-                Type        = "Pets",
-                Name        = "Cow",
-                Description = "A strong reeling founder companion.",
-                Icon        = "rbxassetid://88226351374670",
-                Tier        = 4,
-                Egg         = "Exclusive Egg",
-            },
-            Perk = {
-                Type  = "ReelSpeed",
-                Value = 0.3,
-            },
-            Modifiers = {
-                ReelMultiplier = 0.3,
-            },
-            PetFishing = {
-                Enabled              = true,
-                CastCooldownSeconds  = CAST_COOLDOWN,
-                ReelDurationSeconds  = REEL_DURATION[4],
-            },
-        },
-        ["Capybara"] = {
-            ModelName    = "Capybara",
-            Downloadable = true,
-            SellPrice    = 1000,
-            Data = {
-                Id          = 6,
-                Type        = "Pets",
-                Name        = "Capybara",
-                Description = "A patient fishing founder companion.",
-                Icon        = "rbxassetid://98095048836673",
-                Tier        = 5,
-                Egg         = "Exclusive Egg",
-            },
-            Perk = {
-                Type  = "Luck",
-                Value = 0.2,
-            },
-            Modifiers = {
-                BaseLuck = 0.2,
-            },
-            PetFishing = {
-                Enabled              = true,
-                CastCooldownSeconds  = CAST_COOLDOWN,
-                ReelDurationSeconds  = REEL_DURATION[5],
-            },
-        },
-        ["Axolotl"] = {
-            ModelName    = "Axolotl",
-            Downloadable = true,
-            SellPrice    = 1000,
-            Data = {
-                Id          = 7,
-                Type        = "Pets",
-                Name        = "Axolotl",
-                Description = "A steady fishing founder companion.",
-                Icon        = "rbxassetid://99239886597615",
-                Tier        = 7,
-                Egg         = "Exclusive Egg",
-            },
-            Perk = {
-                Type  = "Luck",
-                Value = 0.7,
-            },
-            Modifiers = {
-                BaseLuck = 0.7,
-            },
-            PetFishing = {
-                Enabled              = true,
-                CastCooldownSeconds  = CAST_COOLDOWN,
-                ReelDurationSeconds  = REEL_DURATION[7],
-            },
-        },
-        ["Penguin"] = {
-            ModelName    = "Penguin",
-            Downloadable = true,
-            SellPrice    = 1000,
-            Data = {
-                Id          = 8,
-                Type        = "Pets",
-                Name        = "Penguin",
-                Description = "A reliable fishing founder companion.",
-                Icon        = "rbxassetid://95119341920121",
-                Tier        = 6,
-                Egg         = "Exclusive Egg",
-            },
-            Perk = {
-                Type  = "Luck",
-                Value = 0.4,
-            },
-            Modifiers = {
-                BaseLuck = 0.4,
-            },
-            PetFishing = {
-                Enabled              = true,
-                CastCooldownSeconds  = CAST_COOLDOWN,
-                ReelDurationSeconds  = REEL_DURATION[6],
-            },
-        },
-        ["Polar Bear"] = {
-            ModelName    = "Polar Bear",
-            Downloadable = true,
-            SellPrice    = 1000,
-            Data = {
-                Id          = 9,
-                Type        = "Pets",
-                Name        = "Polar Bear",
-                Description = "A steady fishing founder companion.",
-                Icon        = "rbxassetid://104560494454772",
-                Tier        = 5,
-                Egg         = "Arctic Crystal Egg",
-            },
-            Perk = {
-                Type  = "Luck",
-                Value = 0.2,
-            },
-            Modifiers = {
-                BaseLuck = 0.2,
-            },
-            PetFishing = {
-                Enabled              = true,
-                CastCooldownSeconds  = CAST_COOLDOWN,
-                ReelDurationSeconds  = REEL_DURATION[5],
-            },
-        },
-        ["Seal"] = {
-            ModelName    = "Seal",
-            Downloadable = true,
-            SellPrice    = 1000,
-            Data = {
-                Id          = 10,
-                Type        = "Pets",
-                Name        = "Seal",
-                Description = "A steady fishing founder companion.",
-                Icon        = "rbxassetid://70465203634521",
-                Tier        = 6,
-                Egg         = "Arctic Crystal Egg",
-            },
-            Perk = {
-                Type  = "Luck",
-                Value = 0.4,
-            },
-            Modifiers = {
-                BaseLuck = 0.4,
-            },
-            PetFishing = {
-                Enabled              = true,
-                CastCooldownSeconds  = CAST_COOLDOWN,
-                ReelDurationSeconds  = REEL_DURATION[6],
-            },
-        },
-        ["Lynx"] = {
-            ModelName    = "Lynx",
-            Downloadable = true,
-            SellPrice    = 1000,
-            Data = {
-                Id          = 11,
-                Type        = "Pets",
-                Name        = "Lynx",
-                Description = "A strong reeling founder companion.",
-                Icon        = "rbxassetid://95445423390581",
-                Tier        = 4,
-                Egg         = "Arctic Crystal Egg",
-            },
-            Perk = {
-                Type  = "ReelSpeed",
-                Value = 0.3,
-            },
-            Modifiers = {
-                ReelMultiplier = 0.3,
-            },
-            PetFishing = {
-                Enabled              = true,
-                CastCooldownSeconds  = CAST_COOLDOWN,
-                ReelDurationSeconds  = REEL_DURATION[4],
-            },
-        },
-        ["Wolf"] = {
-            ModelName    = "Wolf",
-            Downloadable = true,
-            SellPrice    = 1000,
-            Data = {
-                Id          = 12,
-                Type        = "Pets",
-                Name        = "Wolf",
-                Description = "A strong reeling founder companion.",
-                Icon        = "rbxassetid://90545773214181",
-                Tier        = 4,
-                Egg         = "Arctic Crystal Egg",
-            },
-            Perk = {
-                Type  = "Luck",
-                Value = 0.7,
-            },
-            Modifiers = {
-                BaseLuck = 0.7,
-            },
-            PetFishing = {
-                Enabled              = true,
-                CastCooldownSeconds  = CAST_COOLDOWN,
-                ReelDurationSeconds  = REEL_DURATION[4],
-            },
-        },
-        ["Arctic Fox"] = {
-            ModelName    = "Arctic Fox",
-            Downloadable = true,
-            SellPrice    = 1000,
-            Data = {
-                Id          = 13,
-                Type        = "Pets",
-                Name        = "Arctic Fox",
-                Description = "A strong reeling founder companion.",
-                Icon        = "rbxassetid://135157953272892",
-                Tier        = 7,
-                Egg         = "Arctic Crystal Egg",
-            },
-            Perk = {
-                Type  = "Luck",
-                Value = 0.7,
-            },
-            Modifiers = {
-                BaseLuck = 0.7,
-            },
-            PetFishing = {
-                Enabled              = true,
-                CastCooldownSeconds  = CAST_COOLDOWN,
-                ReelDurationSeconds  = REEL_DURATION[7],
-            },
-        },
-        ["Ferret"] = {
-            ModelName    = "Ferret",
-            Downloadable = true,
-            SellPrice    = 1000,
-            Data = {
-                Id          = 14,
-                Type        = "Pets",
-                Name        = "Ferret",
-                Description = "A strong reeling founder companion.",
-                Icon        = "rbxassetid://89040872614522",
-                Tier        = 3,
-                Egg         = "Arctic Crystal Egg",
-            },
-            Perk = {
-                Type  = "ReelSpeed",
-                Value = 0.18,
-            },
-            Modifiers = {
-                ReelMultiplier = 0.18,
-            },
-            PetFishing = {
-                Enabled              = true,
-                CastCooldownSeconds  = CAST_COOLDOWN,
-                ReelDurationSeconds  = REEL_DURATION[3],
-            },
-        },
-        ["Ruby Dragon"] = {
-            TradeLocked  = true,
-            ModelName    = "Ruby Dragon",
-            Downloadable = true,
-            Data = {
-                Id          = 15,
-                Type        = "Pets",
-                Name        = "Ruby Dragon",
-                Description = "",
-                Icon        = "rbxassetid://73877079217281",
-                Tier        = 7,
-            },
-            Perk = {
-                Type  = "Luck",
-                Value = 0.5,
-            },
-            Modifiers = {
-                BaseLuck = 0.5,
-            },
-            PetFishing = {
-                Enabled              = true,
-                CastCooldownSeconds  = CAST_COOLDOWN,
-                ReelDurationSeconds  = REEL_DURATION[7],
-            },
-        },
-    }
-
-    print("[PetsData] Loaded " .. #_G.PetsData .. " pets")
-end
-
--- ============================================================
--- PETS HELPER FUNCTIONS
--- ============================================================
-function GetPetData(petName)
-    return _G.PetsData and _G.PetsData[petName]
-end
-
-function GetPetByTier(tier)
-    local result = {}
-    for name, pet in pairs(_G.PetsData or {}) do
-        if pet.Data and pet.Data.Tier == tier then
-            table.insert(result, name)
-        end
-    end
-    return result
-end
-
-function GetAllPetNames()
-    local names = {}
-    for name in pairs(_G.PetsData or {}) do
-        table.insert(names, name)
-    end
-    table.sort(names)
-    return names
-end
-
--- Variabel global untuk menyimpan pet aktif
-_G.ActivePet = _G.ActivePet or "Tabby Cat"
-
 -- moons.lua: Config / Events / Tasks / needCast / skip / blatantFishCycleCount (FAST 3 KEDIP & UB)
 Config = {
     HookNotif = false,
@@ -1769,114 +1315,6 @@ ExclusiveTab:CreateToggle({
             
             Window:Notify({ Title = "Stopped", Content = "Cancelled!", Duration = 3, Icon = "x" })
         end
-    end
-})
-
--- ============================================================
--- PET COMPANION (Di dalam ExclusiveTab)
--- ============================================================
-ExclusiveTab:CreateSection({ Name = "Pet Companion" })
-
--- Dropdown pilih pet
-local petDropdown = ExclusiveTab:CreateDropdown({
-    Name = "Select Active Pet",
-    Items = GetAllPetNames(),
-    Default = _G.ActivePet or "Tabby Cat",
-    Callback = function(selected)
-        _G.ActivePet = selected
-        local petData = GetPetData(selected)
-        if petData then
-            Window:Notify({
-                Title = "Pet Selected",
-                Content = "Active: " .. selected .. " (Tier " .. petData.Data.Tier .. ")",
-                Duration = 2
-            })
-        end
-    end
-})
-
--- Toggle untuk mengaktifkan fitur PetFishing
-ExclusiveTab:CreateToggle({
-    Name = "Enable Pet Fishing",
-    SubText = "Use pet's cast cooldown & reel duration",
-    Default = _G.PetFishingEnabled or false,
-    Callback = function(state)
-        _G.PetFishingEnabled = state
-        if state then
-            local petData = GetPetData(_G.ActivePet)
-            if petData and petData.PetFishing and petData.PetFishing.Enabled then
-                print("[Exclusive] PetFishing enabled for", _G.ActivePet)
-                Window:Notify({
-                    Title = "Pet Fishing",
-                    Content = "Enabled for " .. _G.ActivePet,
-                    Duration = 2
-                })
-                -- Panggil fungsi untuk mengaktifkan pet fishing (jika ada)
-                -- StartPetFishing(_G.ActivePet)
-            else
-                Window:Notify({
-                    Title = "Pet Not Available",
-                    Content = "Selected pet does not support PetFishing.",
-                    Duration = 2
-                })
-                _G.PetFishingEnabled = false
-            end
-        else
-            print("[Exclusive] PetFishing disabled")
-            Window:Notify({
-                Title = "Pet Fishing",
-                Content = "Disabled",
-                Duration = 2
-            })
-            -- StopPetFishing()
-        end
-    end
-})
-
--- Tombol info pet
-ExclusiveTab:CreateButton({
-    Name = "Show Pet Info",
-    SubText = "Display details of active pet",
-    Callback = function()
-        local petData = GetPetData(_G.ActivePet)
-        if petData then
-            local info = string.format(
-                "Name: %s\nTier: %d\nPerk: %s (+%s)\nSell Price: %d\nPetFishing: %s\nCast: %.1fs\nReel: %.1fs",
-                petData.Data.Name or "N/A",
-                petData.Data.Tier or 0,
-                petData.Perk and petData.Perk.Type or "None",
-                tostring(petData.Perk and petData.Perk.Value or 0),
-                petData.SellPrice or 0,
-                petData.PetFishing and petData.PetFishing.Enabled and "✅ Enabled" or "❌ Disabled",
-                petData.PetFishing and petData.PetFishing.CastCooldownSeconds or 0,
-                petData.PetFishing and petData.PetFishing.ReelDurationSeconds or 0
-            )
-            Window:Notify({
-                Title = "Pet Info - " .. _G.ActivePet,
-                Content = info,
-                Duration = 5
-            })
-        else
-            Window:Notify({
-                Title = "Error",
-                Content = "Pet data not found for: " .. tostring(_G.ActivePet),
-                Duration = 3
-            })
-        end
-    end
-})
-
--- Tombol refresh (jika data pet berubah)
-ExclusiveTab:CreateButton({
-    Name = "Refresh Pet List",
-    SubText = "Update dropdown if pets changed",
-    Callback = function()
-        petDropdown:Refresh(GetAllPetNames())
-        Window:Notify({
-            Title = "Pet List",
-            Content = "Refreshed! " .. #GetAllPetNames() .. " pets available.",
-            Duration = 2
-        })
     end
 })
 
@@ -10190,53 +9628,123 @@ task.spawn(function()
 end)
 
 
--- Lynx Panel - Ping & FPS Monitor with Notification Counter
--- Real ping dari Roblox Stats (Shift+F3)
- Players = game:GetService("Players")
- RunService = game:GetService("RunService")
- Stats = game:GetService("Stats")
- CoreGui = game:GetService("CoreGui")
+--!strict
+-- ============================================================
+-- LYNX MONITOR MODULE (Refactored - Professional Version)
+-- ============================================================
+-- Menampilkan Ping, FPS, dan Notifikasi di layar.
+-- Best Practices:
+--   - --!strict + type annotations
+--   - Semua variabel lokal/encapsulated
+--   - Optimasi FPS (moving average tanpa alokasi tabel)
+--   - Event-driven notifikasi (ChildAdded)
+--   - Cleanup method untuk mencegah memory leak
+-- ============================================================
 
- player = Players.LocalPlayer
- playerGui = player:WaitForChild("PlayerGui")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Stats = game:GetService("Stats")
+local CoreGui = game:GetService("CoreGui")
+local UserInputService = game:GetService("UserInputService")
 
--- Module untuk monitoring
-local MonitorModule = {}
-MonitorModule.GUI = nil
+local LocalPlayer = Players.LocalPlayer
 
--- Variables untuk FPS calculation
-local lastFrameTime = tick()
-local fpsHistory = {}
-local maxFPSHistory = 20
-local updateConnection
-local pingUpdateConnection
-local notificationConnection
+-- Konstanta warna
+local COLORS = {
+    Ping = {
+        Low    = Color3.fromRGB(100, 255, 200),  -- ≤50ms
+        Medium = Color3.fromRGB(150, 200, 255),  -- ≤100ms
+        High   = Color3.fromRGB(180, 140, 255),  -- ≤150ms
+        Bad    = Color3.fromRGB(255, 100, 150),  -- >150ms
+    },
+    FPS = {
+        Good   = Color3.fromRGB(100, 255, 200),  -- ≥55
+        OK     = Color3.fromRGB(150, 200, 255),  -- ≥40
+        Low    = Color3.fromRGB(180, 140, 255),  -- ≥25
+        Bad    = Color3.fromRGB(255, 100, 150),  -- <25
+    },
+    Notif = {
+        None   = Color3.fromRGB(150, 200, 255),  -- 0
+        Few    = Color3.fromRGB(255, 200, 100),  -- 1-5
+        Many   = Color3.fromRGB(255, 150, 100),  -- 6-10
+        Lots   = Color3.fromRGB(255, 100, 100),  -- >10
+    },
+}
 
--- Fungsi untuk membuat GUI
-function createMonitorGUI()
-    local parentGui = playerGui
-    local useCoreGui = pcall(function()
-        local testGui = Instance.new("ScreenGui")
-        testGui.Parent = CoreGui
-        testGui:Destroy()
+local LynxMonitor = {
+    _gui = nil,
+    _connections = {},
+    _fpsSamples = {},
+    _maxSamples = 20,
+    _notifCount = 0,
+    _isActive = false,
+}
+
+-- ============================================================
+-- PRIVATE HELPERS
+-- ============================================================
+
+-- Get real ping dari Roblox Stats (Shift+F3)
+local function getRealPing(): number
+    local ok, ping = pcall(function()
+        local networkStats = Stats:FindFirstChild("Network")
+        if networkStats then
+            local serverStats = networkStats:FindFirstChild("ServerStatsItem")
+            if serverStats then
+                local dataPing = serverStats:FindFirstChild("Data Ping")
+                if dataPing then
+                    return math.floor(dataPing:GetValue())
+                end
+            end
+        end
+        return math.floor(LocalPlayer:GetNetworkPing() * 1000)
     end)
-    
-    if useCoreGui then
-        parentGui = CoreGui
+    return ok and ping or 0
+end
+
+-- Get FPS dengan moving average (tanpa alokasi tabel per frame)
+local function getFPS(): number
+    local currentTime = os.clock()  -- Lebih stabil daripada tick()
+    local deltaTime = currentTime - (LynxMonitor._lastFrameTime or currentTime)
+    LynxMonitor._lastFrameTime = currentTime
+
+    if deltaTime > 0 then
+        local fps = 1 / deltaTime
+        table.insert(LynxMonitor._fpsSamples, fps)
+        if #LynxMonitor._fpsSamples > LynxMonitor._maxSamples then
+            table.remove(LynxMonitor._fpsSamples, 1)
+        end
+
+        local sum = 0
+        for _, v in ipairs(LynxMonitor._fpsSamples) do
+            sum = sum + v
+        end
+        local avg = sum / #LynxMonitor._fpsSamples
+        return math.floor(math.clamp(avg, 0, 240))
     end
-    
+    return 60
+end
+
+-- ============================================================
+-- UI CREATION
+-- ============================================================
+local function createMonitorGUI()
+    local parentGui = CoreGui  -- Selalu gunakan CoreGui untuk floating UI
+
     local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "VoraHubMonitor_" .. math.random(1, 999999)
+    screenGui.Name = "LynxMonitor_" .. math.random(1, 999999)
     screenGui.ResetOnSpawn = false
     screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     screenGui.DisplayOrder = 2147483647
     screenGui.Enabled = true
     screenGui.IgnoreGuiInset = true
-    
+    screenGui.Parent = parentGui
+
+    -- Container
     local container = Instance.new("Frame")
     container.Name = "Container"
-    container.Size = UDim2.new(0, 200, 0, 100)  -- Increased height untuk notifications
-    container.Position = UDim2.new(0, 250, 0, 100)  -- Moved to the right
+    container.Size = UDim2.new(0, 200, 0, 100)
+    container.Position = UDim2.new(0, 250, 0, 100)
     container.BackgroundColor3 = Color3.fromRGB(20, 30, 50)
     container.BackgroundTransparency = 0.15
     container.BorderSizePixel = 0
@@ -10244,52 +9752,50 @@ function createMonitorGUI()
     container.ZIndex = 10000
     container.Active = true
     container.Parent = screenGui
-    
-    local containerCorner = Instance.new("UICorner")
-    containerCorner.CornerRadius = UDim.new(0, 10)
-    containerCorner.Parent = container
-    
-    local containerStroke = Instance.new("UIStroke")
-    containerStroke.Color = Color3.fromRGB(50, 150, 255)
-    containerStroke.Thickness = 2
-    containerStroke.Transparency = 0.3
-    containerStroke.Parent = container
-    
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 10)
+    corner.Parent = container
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(50, 150, 255)
+    stroke.Thickness = 2
+    stroke.Transparency = 0.3
+    stroke.Parent = container
+
+    -- Header
     local header = Instance.new("Frame")
     header.Name = "Header"
     header.Size = UDim2.new(1, 0, 0, 35)
     header.BackgroundTransparency = 1
     header.ZIndex = 10001
     header.Parent = container
-    
+
     local logoIcon = Instance.new("ImageLabel")
     logoIcon.Name = "LogoIcon"
     logoIcon.Size = UDim2.new(0, 24, 0, 24)
     logoIcon.Position = UDim2.new(0, 8, 0, 5)
     logoIcon.BackgroundTransparency = 1
-    logoIcon.Image = "rbxassetid://112067161065104"
+    logoIcon.Image = "rbxassetid://112067161065104"  -- devHub logo
     logoIcon.ScaleType = Enum.ScaleType.Fit
     logoIcon.ImageColor3 = Color3.fromRGB(100, 180, 255)
     logoIcon.ZIndex = 10002
     logoIcon.Parent = header
-    
-    local logoCorner = Instance.new("UICorner")
-    logoCorner.CornerRadius = UDim.new(0, 6)
-    logoCorner.Parent = logoIcon
-    
+
     local titleLabel = Instance.new("TextLabel")
     titleLabel.Name = "TitleLabel"
     titleLabel.Size = UDim2.new(1, -40, 1, 0)
     titleLabel.Position = UDim2.new(0, 36, 0, 0)
     titleLabel.BackgroundTransparency = 1
-    titleLabel.Text = "VORAHUB PANEL"
+    titleLabel.Text = "LYNX MONITOR"
     titleLabel.TextColor3 = Color3.fromRGB(100, 180, 255)
     titleLabel.TextSize = 13
     titleLabel.Font = Enum.Font.GothamBold
     titleLabel.TextXAlignment = Enum.TextXAlignment.Left
     titleLabel.ZIndex = 10002
     titleLabel.Parent = header
-    
+
+    -- Separator
     local separator = Instance.new("Frame")
     separator.Name = "Separator"
     separator.Size = UDim2.new(1, -16, 0, 1)
@@ -10299,15 +9805,16 @@ function createMonitorGUI()
     separator.BorderSizePixel = 0
     separator.ZIndex = 10001
     separator.Parent = container
-    
+
+    -- Content
     local content = Instance.new("Frame")
     content.Name = "Content"
-    content.Size = UDim2.new(1, -16, 0, 60)  -- Fixed height untuk content
+    content.Size = UDim2.new(1, -16, 0, 60)
     content.Position = UDim2.new(0, 8, 0, 40)
     content.BackgroundTransparency = 1
     content.ZIndex = 10001
     content.Parent = container
-    
+
     -- Row 1: Ping & FPS
     local pingLabel = Instance.new("TextLabel")
     pingLabel.Name = "PingLabel"
@@ -10315,47 +9822,46 @@ function createMonitorGUI()
     pingLabel.Position = UDim2.new(0, 0, 0, 0)
     pingLabel.BackgroundTransparency = 1
     pingLabel.Text = "Ping: 0 ms"
-    pingLabel.TextColor3 = Color3.fromRGB(150, 200, 255)
+    pingLabel.TextColor3 = COLORS.Ping.Low
     pingLabel.TextSize = 13
     pingLabel.Font = Enum.Font.GothamBold
     pingLabel.TextXAlignment = Enum.TextXAlignment.Center
     pingLabel.ZIndex = 10002
     pingLabel.Parent = content
-    
-    local verticalSeparator = Instance.new("Frame")
-    verticalSeparator.Name = "VerticalSeparator"
-    verticalSeparator.Size = UDim2.new(0, 1, 0, 25)
-    verticalSeparator.Position = UDim2.new(0.5, 0, 0, 0)
-    verticalSeparator.BackgroundColor3 = Color3.fromRGB(50, 150, 255)
-    verticalSeparator.BackgroundTransparency = 0.5
-    verticalSeparator.BorderSizePixel = 0
-    verticalSeparator.ZIndex = 10001
-    verticalSeparator.Parent = content
-    
+
+    local verticalSep = Instance.new("Frame")
+    verticalSep.Name = "VerticalSeparator"
+    verticalSep.Size = UDim2.new(0, 1, 0, 25)
+    verticalSep.Position = UDim2.new(0.5, 0, 0, 0)
+    verticalSep.BackgroundColor3 = Color3.fromRGB(50, 150, 255)
+    verticalSep.BackgroundTransparency = 0.5
+    verticalSep.BorderSizePixel = 0
+    verticalSep.ZIndex = 10001
+    verticalSep.Parent = content
+
     local fpsLabel = Instance.new("TextLabel")
     fpsLabel.Name = "FPSLabel"
     fpsLabel.Size = UDim2.new(0.5, -6, 0, 25)
     fpsLabel.Position = UDim2.new(0.5, 6, 0, 0)
     fpsLabel.BackgroundTransparency = 1
     fpsLabel.Text = "FPS: 60"
-    fpsLabel.TextColor3 = Color3.fromRGB(100, 255, 200)
+    fpsLabel.TextColor3 = COLORS.FPS.Good
     fpsLabel.TextSize = 13
     fpsLabel.Font = Enum.Font.GothamBold
     fpsLabel.TextXAlignment = Enum.TextXAlignment.Center
     fpsLabel.ZIndex = 10002
     fpsLabel.Parent = content
-    
-    -- Horizontal separator
-    local horizontalSeparator = Instance.new("Frame")
-    horizontalSeparator.Name = "HorizontalSeparator"
-    horizontalSeparator.Size = UDim2.new(1, 0, 0, 1)
-    horizontalSeparator.Position = UDim2.new(0, 0, 0, 30)
-    horizontalSeparator.BackgroundColor3 = Color3.fromRGB(50, 150, 255)
-    horizontalSeparator.BackgroundTransparency = 0.5
-    horizontalSeparator.BorderSizePixel = 0
-    horizontalSeparator.ZIndex = 10001
-    horizontalSeparator.Parent = content
-    
+
+    local horizSep = Instance.new("Frame")
+    horizSep.Name = "HorizontalSeparator"
+    horizSep.Size = UDim2.new(1, 0, 0, 1)
+    horizSep.Position = UDim2.new(0, 0, 0, 30)
+    horizSep.BackgroundColor3 = Color3.fromRGB(50, 150, 255)
+    horizSep.BackgroundTransparency = 0.5
+    horizSep.BorderSizePixel = 0
+    horizSep.ZIndex = 10001
+    horizSep.Parent = content
+
     -- Row 2: Notifications
     local notifLabel = Instance.new("TextLabel")
     notifLabel.Name = "NotifLabel"
@@ -10363,291 +9869,220 @@ function createMonitorGUI()
     notifLabel.Position = UDim2.new(0, 0, 0, 35)
     notifLabel.BackgroundTransparency = 1
     notifLabel.Text = "Notifications: 0"
-    notifLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
+    notifLabel.TextColor3 = COLORS.Notif.None
     notifLabel.TextSize = 13
     notifLabel.Font = Enum.Font.GothamBold
     notifLabel.TextXAlignment = Enum.TextXAlignment.Center
     notifLabel.ZIndex = 10002
     notifLabel.Parent = content
-    
-    -- Make draggable
-    local dragging = false
-    local dragInput, dragStart, startPos
-    local UserInputService = game:GetService("UserInputService")
-    
-    container.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = container.Position
-            
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
-        end
-    end)
-    
-    container.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            dragInput = input
-        end
-    end)
-    
-    UserInputService.InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
-            local delta = input.Position - dragStart
-            container.Position = UDim2.new(
-                startPos.X.Scale,
-                startPos.X.Offset + delta.X,
-                startPos.Y.Scale,
-                startPos.Y.Offset + delta.Y
-            )
-        end
-    end)
-    
-    screenGui.Parent = parentGui
-    
+
+    -- ============================================================
+    -- DRAGGABLE (Menggunakan devLib jika tersedia, fallback manual)
+    -- ============================================================
+    if _G.Core and _G.Core.UI and _G.Core.UI._makeDraggable then
+        _G.Core.UI._makeDraggable(header, container)
+    else
+        -- Manual draggable (fallback)
+        local dragging = false
+        local dragStart, startPos
+
+        container.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or 
+               input.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                dragStart = input.Position
+                startPos = container.Position
+                input.Changed:Connect(function()
+                    if input.UserInputState == Enum.UserInputState.End then
+                        dragging = false
+                    end
+                end)
+            end
+        end)
+
+        UserInputService.InputChanged:Connect(function(input)
+            if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or 
+                             input.UserInputType == Enum.UserInputType.Touch) then
+                local delta = input.Position - dragStart
+                container.Position = UDim2.new(
+                    startPos.X.Scale,
+                    startPos.X.Offset + delta.X,
+                    startPos.Y.Scale,
+                    startPos.Y.Offset + delta.Y
+                )
+            end
+        end)
+    end
+
+    -- Maintain DisplayOrder
     task.spawn(function()
         while screenGui and screenGui.Parent do
             task.wait(1)
-            if screenGui and screenGui.Parent then
-                screenGui.DisplayOrder = 2147483647
-            end
+            screenGui.DisplayOrder = 2147483647
         end
     end)
-    
+
     return {
         ScreenGui = screenGui,
         Container = container,
         PingLabel = pingLabel,
         FPSLabel = fpsLabel,
         NotifLabel = notifLabel,
-        LogoIcon = logoIcon,
-        ParentType = useCoreGui and "CoreGui" or "PlayerGui"
     }
 end
 
--- Get real ping from Roblox Stats (sama seperti Shift+F3)
-function getRealPing()
-    local success, ping = pcall(function()
-        -- Ambil dari Stats.Network.ServerStatsItem["Data Ping"]
-        local networkStats = Stats:FindFirstChild("Network")
-        if networkStats then
-            local serverStats = networkStats:FindFirstChild("ServerStatsItem")
-            if serverStats then
-                local dataPing = serverStats:FindFirstChild("Data Ping")
-                if dataPing then
-                    local pingValue = dataPing:GetValue()
-                    return math.floor(pingValue)
-                end
-            end
+-- ============================================================
+-- COLOR UPDATERS (Menggunakan lookup table)
+-- ============================================================
+local function getPingColor(ping: number): Color3
+    if ping <= 50 then return COLORS.Ping.Low end
+    if ping <= 100 then return COLORS.Ping.Medium end
+    if ping <= 150 then return COLORS.Ping.High end
+    return COLORS.Ping.Bad
+end
+
+local function getFPSColor(fps: number): Color3
+    if fps >= 55 then return COLORS.FPS.Good end
+    if fps >= 40 then return COLORS.FPS.OK end
+    if fps >= 25 then return COLORS.FPS.Low end
+    return COLORS.FPS.Bad
+end
+
+local function getNotifColor(count: number): Color3
+    if count == 0 then return COLORS.Notif.None end
+    if count <= 5 then return COLORS.Notif.Few end
+    if count <= 10 then return COLORS.Notif.Many end
+    return COLORS.Notif.Lots
+end
+
+-- ============================================================
+-- NOTIFICATION TRACKING (Event-driven, bukan scan)
+-- ============================================================
+local function setupNotificationTracking(gui)
+    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not playerGui then return end
+
+    local textNotifs = playerGui:FindFirstChild("Text Notifications")
+    if not textNotifs then return end
+
+    local frame = textNotifs:FindFirstChild("Frame")
+    if not frame then return end
+
+    -- Hitung notifikasi awal
+    local count = 0
+    for _, child in ipairs(frame:GetChildren()) do
+        if child.Name == "Tile" then count = count + 1 end
+    end
+    LynxMonitor._notifCount = count
+    if gui and gui.NotifLabel then
+        gui.NotifLabel.Text = "Notifications: " .. count
+        gui.NotifLabel.TextColor3 = getNotifColor(count)
+    end
+
+    -- Event ketika Tile ditambahkan/dihapus
+    local function updateCount()
+        local newCount = 0
+        for _, child in ipairs(frame:GetChildren()) do
+            if child.Name == "Tile" then newCount = newCount + 1 end
         end
-        -- Fallback ke GetNetworkPing
-        return math.floor(player:GetNetworkPing() * 1000)
-    end)
-    return success and ping or 0
-end
-
--- Get FPS
-function getFPS()
-    local currentTime = tick()
-    local deltaTime = currentTime - lastFrameTime
-    lastFrameTime = currentTime
-    
-    local currentFPS = 0
-    if deltaTime > 0 then
-        currentFPS = 1 / deltaTime
-    end
-    
-    table.insert(fpsHistory, currentFPS)
-    
-    if #fpsHistory > maxFPSHistory then
-        table.remove(fpsHistory, 1)
-    end
-    
-    local sum = 0
-    for _, fps in ipairs(fpsHistory) do
-        sum = sum + fps
-    end
-    
-    local averageFPS = sum / #fpsHistory
-    return math.floor(math.clamp(averageFPS, 0, 240))
-end
-
--- Get total notifications (count semua object bernama "Tile")
-function getTotalNotifications()
-    local success, count = pcall(function()
-        local textNotifications = playerGui:FindFirstChild("Text Notifications")
-        if textNotifications then
-            local frame = textNotifications:FindFirstChild("Frame")
-            if frame then
-                -- Count semua object yang bernama "Tile"
-                local notifCount = 0
-                for _, child in ipairs(frame:GetChildren()) do
-                    if child.Name == "Tile" then
-                        notifCount = notifCount + 1
-                    end
-                end
-                return notifCount
-            end
+        LynxMonitor._notifCount = newCount
+        if gui and gui.NotifLabel then
+            gui.NotifLabel.Text = "Notifications: " .. newCount
+            gui.NotifLabel.TextColor3 = getNotifColor(newCount)
         end
-        return 0
-    end)
-    return success and count or 0
-end
-
--- Update colors
- function updatePingColor(pingLabel, value)
-    local ping = tonumber(value)
-    if ping <= 50 then
-        pingLabel.TextColor3 = Color3.fromRGB(100, 255, 200)
-    elseif ping <= 100 then
-        pingLabel.TextColor3 = Color3.fromRGB(150, 200, 255)
-    elseif ping <= 150 then
-        pingLabel.TextColor3 = Color3.fromRGB(180, 140, 255)
-    else
-        pingLabel.TextColor3 = Color3.fromRGB(255, 100, 150)
     end
+
+    local conn1 = frame.ChildAdded:Connect(updateCount)
+    local conn2 = frame.ChildRemoved:Connect(updateCount)
+    table.insert(LynxMonitor._connections, conn1)
+    table.insert(LynxMonitor._connections, conn2)
 end
 
- function updateFPSColor(fpsLabel, value)
-    local fps = tonumber(value)
-    if fps >= 55 then
-        fpsLabel.TextColor3 = Color3.fromRGB(100, 255, 200)
-    elseif fps >= 40 then
-        fpsLabel.TextColor3 = Color3.fromRGB(150, 200, 255)
-    elseif fps >= 25 then
-        fpsLabel.TextColor3 = Color3.fromRGB(180, 140, 255)
-    else
-        fpsLabel.TextColor3 = Color3.fromRGB(255, 100, 150)
-    end
-end
-
- function updateNotifColor(notifLabel, value)
-    local count = tonumber(value)
-    if count == 0 then
-        notifLabel.TextColor3 = Color3.fromRGB(150, 200, 255)
-    elseif count <= 5 then
-        notifLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
-    elseif count <= 10 then
-        notifLabel.TextColor3 = Color3.fromRGB(255, 150, 100)
-    else
-        notifLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-    end
-end
-
--- Show panel
-function MonitorModule:Show()
-    if self.GUI then
-        self.GUI.ScreenGui.Enabled = true
+-- ============================================================
+-- PUBLIC API
+-- ============================================================
+function LynxMonitor:Show()
+    if self._gui then
+        self._gui.ScreenGui.Enabled = true
         return
     end
-    
-    self.GUI = createMonitorGUI()
-    print("[VoraHub Monitor] Started in:", self.GUI.ParentType)
-    
-    -- Update FPS
-    updateConnection = RunService.RenderStepped:Connect(function()
-        if not self.GUI or not self.GUI.ScreenGui or not self.GUI.ScreenGui.Parent then
-            if updateConnection then
-                updateConnection:Disconnect()
-            end
-            return
-        end
-        if not self.GUI.FPSLabel then
-            return
-        end
-        
-        local fps = getFPS()
-        self.GUI.FPSLabel.Text = "FPS: " .. tostring(fps)
-        updateFPSColor(self.GUI.FPSLabel, fps)
-    end)
-    
-    -- Update ping (real ping dari Stats)
+
+    self._gui = createMonitorGUI()
+    self._isActive = true
+
+    -- Setup notification tracking
+    setupNotificationTracking(self._gui)
+
+    -- Update FPS & Ping
     local lastPingUpdate = 0
-    pingUpdateConnection = RunService.Heartbeat:Connect(function()
-        if not self.GUI or not self.GUI.ScreenGui or not self.GUI.ScreenGui.Parent then
-            if pingUpdateConnection then
-                pingUpdateConnection:Disconnect()
+    local lastFPSUpdate = 0
+
+    local conn = RunService.Heartbeat:Connect(function()
+        if not self._isActive or not self._gui or not self._gui.ScreenGui then
+            return
+        end
+
+        local now = os.clock()
+
+        -- Update FPS setiap 0.3 detik (bukan setiap frame)
+        if now - lastFPSUpdate >= 0.3 then
+            local fps = getFPS()
+            if self._gui.FPSLabel then
+                self._gui.FPSLabel.Text = "FPS: " .. fps
+                self._gui.FPSLabel.TextColor3 = getFPSColor(fps)
             end
-            return
+            lastFPSUpdate = now
         end
-        if not self.GUI.PingLabel then
-            return
-        end
-        
-        local currentTime = tick()
-        if currentTime - lastPingUpdate >= 0.5 then
+
+        -- Update Ping setiap 0.5 detik
+        if now - lastPingUpdate >= 0.5 then
             local ping = getRealPing()
-            self.GUI.PingLabel.Text = "Ping: " .. ping .. " ms"
-            updatePingColor(self.GUI.PingLabel, ping)
-            lastPingUpdate = currentTime
-        end
-    end)
-    
-    -- Update notifications count
-    local lastNotifUpdate = 0
-    notificationConnection = RunService.Heartbeat:Connect(function()
-        if not self.GUI or not self.GUI.ScreenGui or not self.GUI.ScreenGui.Parent then
-            if notificationConnection then
-                notificationConnection:Disconnect()
+            if self._gui.PingLabel then
+                self._gui.PingLabel.Text = "Ping: " .. ping .. " ms"
+                self._gui.PingLabel.TextColor3 = getPingColor(ping)
             end
-            return
-        end
-        if not self.GUI.NotifLabel then
-            return
-        end
-        
-        local currentTime = tick()
-        if currentTime - lastNotifUpdate >= 1 then  -- Update every 1 second
-            local notifCount = getTotalNotifications()
-            self.GUI.NotifLabel.Text = "Notifications: " .. notifCount
-            updateNotifColor(self.GUI.NotifLabel, notifCount)
-            lastNotifUpdate = currentTime
+            lastPingUpdate = now
         end
     end)
+    table.insert(self._connections, conn)
+
+    print("[LynxMonitor] Started")
 end
 
--- Hide, Toggle, Destroy methods
-function MonitorModule:Hide()
-    if self.GUI and self.GUI.ScreenGui then
-        self.GUI.ScreenGui.Enabled = false
+function LynxMonitor:Hide()
+    if self._gui and self._gui.ScreenGui then
+        self._gui.ScreenGui.Enabled = false
     end
 end
 
-function MonitorModule:Toggle()
-    if self.GUI and self.GUI.ScreenGui then
-        self.GUI.ScreenGui.Enabled = not self.GUI.ScreenGui.Enabled
+function LynxMonitor:Toggle()
+    if self._gui and self._gui.ScreenGui then
+        self._gui.ScreenGui.Enabled = not self._gui.ScreenGui.Enabled
     else
         self:Show()
     end
 end
 
-function MonitorModule:Destroy()
-    if updateConnection then
-        updateConnection:Disconnect()
-        updateConnection = nil
+function LynxMonitor:Destroy()
+    self._isActive = false
+
+    -- Disconnect semua connections
+    for _, conn in ipairs(self._connections) do
+        pcall(conn.Disconnect, conn)
     end
-    
-    if pingUpdateConnection then
-        pingUpdateConnection:Disconnect()
-        pingUpdateConnection = nil
+    self._connections = {}
+
+    -- Destroy GUI
+    if self._gui and self._gui.ScreenGui then
+        self._gui.ScreenGui:Destroy()
+        self._gui = nil
     end
-    
-    if notificationConnection then
-        notificationConnection:Disconnect()
-        notificationConnection = nil
-    end
-    
-    if self.GUI and self.GUI.ScreenGui then
-        self.GUI.ScreenGui:Destroy()
-        self.GUI = nil
-    end
-    
-    fpsHistory = {}
+
+    self._fpsSamples = {}
+    print("[LynxMonitor] Destroyed")
 end
 
--- Auto-start monitor
-MonitorModule:Show()
+-- Auto-start
+LynxMonitor:Show()
+
+return LynxMonitor
