@@ -7430,14 +7430,10 @@ ShopTab:CreateButton({
             warn("Merchant NPC not found.")
         end
     end
-})-- ============================================================
--- TELEPORT TO ISLAND (Refactored with Retry & Lock)
--- ============================================================
+})
+
 TeleportTab:CreateSection({ Name = "Island", Icon = "rbxassetid://7733955511" })
 
--- ============================================================
--- LOCATION DATA
--- ============================================================
 local IslandLocations = {
     ["Ancient Ruins"] = Vector3.new(6009, -585, 4691),
     ["Ancient Jungle"] = Vector3.new(1518, 1, -186),
@@ -7464,19 +7460,13 @@ local IslandLocations = {
     ["Volcanic Cavern"] = Vector3.new(1097.38257, 85.8561707, -10243.374, 0.000799760048, -8.65786873e-08, 0.999999702, 3.16020241e-08, 1, 8.65534346e-08, -0.999999702, 3.15327924e-08, 0.000799760048),
     ["Lava Basin"] = Vector3.new(934.931152, 67.6846008, -10218.3184, -0.712165296, 1.81655864e-08, 0.702011824, -1.73417316e-08, 1, -4.34690186e-08, -0.702011824, -4.31312266e-08, -0.712165296),
     ["Secret Passage"] = Vector3.new(3431.59546, -299.344971, 3359.79614, -0.947619379, 3.96371149e-08, -0.319401741, 3.15227737e-08, 1, 3.0574423e-08, 0.319401741, 1.89044869e-08, -0.947619379),
-    ["Planetary Observatory"] = Vector3.new(424.709442, 3.67347598, 2186.08545, -0.248919666, 4.43553425e-08, -0.968524158, -4.75323825e-09, 1, 4.70184638e-08, 0.968524158, 1.63074461e-08, -0.248919666),
+	["Planetary Observatory"] = Vector3.new(424.709442, 3.67347598, 2186.08545, -0.248919666, 4.43553425e-08, -0.968524158, -4.75323825e-09, 1, 4.70184638e-08, 0.968524158, 1.63074461e-08, -0.248919666),
     ["Aquatic Research Lab"] = Vector3.new(5006.53125, 4934.31055, 5008.31885, 0.954527259, 3.15839692e-08, -0.298123598, -6.24583052e-09, 1, 8.5944734e-08, 0.298123598, -8.01745657e-08, 0.954527259),
     ["Underwater City"] = Vector3.new(-3141.34546, -643.484253, -10408.1104, 0.120906673, 5.98232788e-08, -0.99266386, 4.37882157e-08, 1, 6.55988117e-08, 0.99266386, -5.13983132e-08, 0.120906673),
+    
 }
 
 local SelectedIsland = nil
-local LockThread = nil
-local LockActive = false
-local LockedCFrame = nil
-
--- ============================================================
--- HELPER FUNCTIONS
--- ============================================================
 
 local function getIslandFolder()
     return workspace:FindFirstChild("Islands")
@@ -7487,6 +7477,7 @@ local function getIslandDropdownItems()
     if not folder then
         return { "Islands folder not found" }
     end
+
     local out = {}
     for _, child in ipairs(folder:GetChildren()) do
         if child:IsA("Model") or child:IsA("BasePart") or child:IsA("CFrameValue") or child:IsA("Vector3Value") or child:IsA("Folder") then
@@ -7502,6 +7493,7 @@ end
 
 local function resolveCFrameFromInstance(inst)
     if not inst then return nil end
+
     if inst:IsA("Model") then
         return inst:GetPivot()
     end
@@ -7524,133 +7516,37 @@ local function resolveCFrameFromInstance(inst)
             return part.CFrame
         end
     end
+
     return nil
 end
 
 local function resolveIslandCFrame(selection)
     if not selection or selection == "" then return nil end
+
     local folder = getIslandFolder()
     if folder then
         local child = folder:FindFirstChild(selection)
-        return resolveCFrameFromInstance(child)
+        local cf = resolveCFrameFromInstance(child)
+        if cf then return cf end
     end
     return nil
 end
 
--- ============================================================
--- TELEPORT WITH RETRY
--- ============================================================
-
---- Teleport karakter ke CFrame target dengan retry jika gagal.
---- @param targetCFrame CFrame - posisi tujuan.
---- @param retries number - jumlah percobaan (default 3).
---- @param delay number - jeda antar percobaan (default 0.3).
---- @return boolean - true jika berhasil.
-local function teleportWithRetry(targetCFrame: CFrame, retries: number?, delay: number?): boolean
-    retries = retries or 3
-    delay = delay or 0.3
-    local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
-    if not hrp then
-        warn("[Teleport] Character or HumanoidRootPart not found")
-        return false
-    end
-
-    local _, y, _ = hrp.CFrame:ToOrientation()
-    local destCFrame = CFrame.new(targetCFrame.Position + Vector3.new(0, 3, 0)) * CFrame.Angles(0, y, 0)
-
-    for attempt = 1, retries do
-        hrp.CFrame = destCFrame
-        task.wait(delay)
-
-        -- Cek apakah posisi sudah mendekati target (toleransi 5 stud)
-        local currentPos = hrp.Position
-        local targetPos = destCFrame.Position
-        local distance = (currentPos - targetPos).Magnitude
-        if distance < 5 then
-            print("[Teleport] Success on attempt", attempt)
-            return true
-        else
-            print("[Teleport] Attempt", attempt, "failed, distance:", distance)
-        end
-    end
-
-    warn("[Teleport] All attempts failed, final distance:", (hrp.Position - destCFrame.Position).Magnitude)
-    return false
-end
-
--- ============================================================
--- LOCK POSITION (Heartbeat Loop)
--- ============================================================
-
-local function stopLock()
-    LockActive = false
-    if LockThread then
-        task.cancel(LockThread)
-        LockThread = nil
-    end
-    LockedCFrame = nil
-    print("[Teleport] Lock stopped")
-end
-
-local function startLock(targetCFrame: CFrame)
-    stopLock()
-    LockActive = true
-    LockedCFrame = targetCFrame
-    print("[Teleport] Lock started")
-
-    LockThread = task.spawn(function()
-        local RunService = game:GetService("RunService")
-        local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
-        if not hrp then
-            warn("[Teleport] Cannot lock: no HumanoidRootPart")
-            LockActive = false
-            return
-        end
-
-        local _, y, _ = hrp.CFrame:ToOrientation()
-        local destCFrame = CFrame.new(LockedCFrame.Position + Vector3.new(0, 3, 0)) * CFrame.Angles(0, y, 0)
-
-        local connection
-        connection = RunService.Heartbeat:Connect(function()
-            if not LockActive then
-                connection:Disconnect()
-                return
-            end
-            local currentHrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
-            if currentHrp then
-                currentHrp.CFrame = destCFrame
-            end
-        end)
-
-        -- Tunggu sampai LockActive false atau karakter hilang
-        while LockActive and Player.Character do
-            task.wait(0.5)
-        end
-        if connection then connection:Disconnect() end
-        LockActive = false
-        print("[Teleport] Lock thread ended")
-    end)
-end
-
--- ============================================================
--- UI ELEMENTS
--- ============================================================
-
 local IslandDropdown = TeleportTab:CreateDropdown({
-    Name = "Select Island",
-    Items = getIslandDropdownItems(),
+	Name = "Select Island",
+	 Items = getIslandDropdownItems(),
     Callback = function(Value)
         SelectedIsland = Value
-    end,
+    end
 })
 
--- Refresh dropdown otomatis saat folder Islands berubah
 task.spawn(function()
     local function refresh()
         if IslandDropdown and IslandDropdown.Refresh then
             IslandDropdown:Refresh(getIslandDropdownItems())
         end
     end
+
     local folder = getIslandFolder()
     if not folder then
         for _ = 1, 20 do
@@ -7659,6 +7555,7 @@ task.spawn(function()
             task.wait(0.5)
         end
     end
+
     refresh()
     if folder then
         folder.ChildAdded:Connect(refresh)
@@ -7666,111 +7563,20 @@ task.spawn(function()
     end
 end)
 
--- Tombol Teleport
 TeleportTab:CreateButton({
-    Name = "Teleport to Island",
-    Icon = "rbxassetid://7733920644",
-    Callback = function()
+	Name = "Teleport to Island",
+	Icon = "rbxassetid://7733920644",
+	  Callback = function()
         local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
-        if not hrp then
-            Window:Notify({
-                Title = "Error",
-                Content = "Character not found!",
-                Duration = 2,
-            })
-            return
-        end
+        if not hrp then return end
 
         local cf = resolveIslandCFrame(SelectedIsland)
-        if not cf then
-            Window:Notify({
-                Title = "Error",
-                Content = "Invalid island selected!",
-                Duration = 2,
-            })
-            return
-        end
+        if not cf then return end
 
-        -- Matikan lock jika aktif
-        if LockActive then
-            stopLock()
-        end
-
-        local success = teleportWithRetry(cf, 3, 0.3)
-        if success then
-            Window:Notify({
-                Title = "Teleport",
-                Content = "Teleported to " .. SelectedIsland,
-                Duration = 2,
-            })
-        else
-            Window:Notify({
-                Title = "Teleport Failed",
-                Content = "Could not reach destination. Try using Lock.",
-                Duration = 3,
-            })
-        end
-    end,
-})
-
--- Toggle Lock Position
-TeleportTab:CreateToggle({
-    Name = "Lock Position to Island",
-    SubText = "Keep teleporting every frame (bypass anti-teleport)",
-    Default = false,
-    Callback = function(state)
-        if state then
-            local cf = resolveIslandCFrame(SelectedIsland)
-            if not cf then
-                Window:Notify({
-                    Title = "Error",
-                    Content = "Select a valid island first!",
-                    Duration = 2,
-                })
-                -- Toggle akan tetap false karena kita set false di sini
-                -- Tapi UI toggle tidak bisa di-set dari sini secara langsung, jadi kita beri notifikasi dan kita matikan.
-                -- Alternatif: kita simpan state terakhir.
-                -- Kita bisa set LockActive = false dan tidak memulai lock.
-                return
-            end
-            startLock(cf)
-            Window:Notify({
-                Title = "Lock Enabled",
-                Content = "Position locked to " .. SelectedIsland,
-                Duration = 2,
-            })
-        else
-            stopLock()
-            Window:Notify({
-                Title = "Lock Disabled",
-                Content = "Position lock released",
-                Duration = 2,
-            })
-        end
-    end,
-})
-
--- Tambahkan tombol untuk unlock cepat (opsional)
-TeleportTab:CreateButton({
-    Name = "Unlock Position",
-    SubText = "Stop locking to island",
-    Icon = "rbxassetid://7733920644",
-    Callback = function()
-        if LockActive then
-            stopLock()
-            Window:Notify({
-                Title = "Unlocked",
-                Content = "Position lock released",
-                Duration = 2,
-            })
-        else
-            Window:Notify({
-                Title = "Info",
-                Content = "No lock active",
-                Duration = 2,
-            })
-        end
-    end,
+        local _, y, _ = hrp.CFrame:ToOrientation()
+        local dest = cf.Position + Vector3.new(0, 3, 0)
+        hrp.CFrame = CFrame.new(dest) * CFrame.Angles(0, y, 0)
+    end
 })
 
 TeleportTab:CreateSection({ Name = "Tp To Player", Icon = "rbxassetid://7733955511" })
