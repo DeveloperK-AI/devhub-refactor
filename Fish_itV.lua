@@ -9151,184 +9151,310 @@ player.CharacterAdded:Connect(function(newChar)
 end)
 
 -- ============================================
--- CENTRALIZED SERVER HOP FUNCTION
+-- CENTRALIZED SERVER HOP FUNCTION (Refactored)
 -- ============================================
+--!strict
 
-function ServerHop(reason, forcePublic)
-	reason = reason or "Server hopping..."
-	forcePublic = forcePublic or false
-	
-	-- Check if in private server (for notification only)
-	local isPrivateServer = game.PrivateServerId ~= "" and game.PrivateServerOwnerId ~= 0
-	
-	-- Notify user
-	if Window then
-		local description = reason
-		if isPrivateServer and forcePublic then
-			description = description .. "\n(Leaving private server → public)"
-		end
-		
-		Window:Notify({
-			Title = "🔄 Server Hop",
-			Content = description,
-			Icon = "rbxassetid://7733920644",
-			Duration = 3
-		})
-	end
-	
-	task.wait(0.5)
+local ServerHop = {
+    _lastHopTime = 0,
+    _cooldown = 3,
+    _isHopInProgress = false,
+}
 
-	
-	local HttpService = game:GetService("HttpService")
-	local TeleportService = game:GetService("TeleportService")
-	local Players = game:GetService("Players")
-	local LocalPlayer = Players.LocalPlayer
-	
-	local success, result = pcall(function()
-		-- Try to get list of PUBLIC servers
-		local url = "https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Desc&limit=100"
-		local response = game:HttpGet(url)
-		local serverList = HttpService:JSONDecode(response)
-		
-		if serverList and serverList.data then
-			-- Find best server (not current one, has space)
-			for _, server in ipairs(serverList.data) do
-				if server.id ~= game.JobId and server.playing < server.maxPlayers then
-					print("[ServerHop] Found public server:", server.id)
-					TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, LocalPlayer)
-					return true
-				end
-			end
-		end
-		
-		-- No suitable server found
-		warn("[ServerHop] No suitable public server found in list")
-		return false
-	end)
-	
-	-- If server list method failed, try fallback methods
-	if not success or not result then
-		warn("[ServerHop] Primary method failed, trying fallback...")
-		print("[ServerHop] forcePublic =", forcePublic)
-		print("[ServerHop] isPrivateServer =", isPrivateServer)
-		
-		-- If forcing public, use pagination to find available public servers
-		if forcePublic then
-			print("[ServerHop] Force public mode - using pagination to find servers...")
-			
-			local paginationSuccess = pcall(function()
-				local servers = {}
-				local cursor = ""
-				local pageCount = 0
-				local maxPages = 5 -- Limit to prevent infinite loop
-				
-				repeat
-					pageCount = pageCount + 1
-					local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
-					if cursor ~= "" then
-						url = url .. "&cursor=" .. cursor
-					end
-					
-					print("[ServerHop] Fetching page", pageCount, "of servers...")
-					local response = game:HttpGet(url)
-					local serverData = HttpService:JSONDecode(response)
-					
-					for _, server in pairs(serverData.data) do
-						if server.id ~= game.JobId and server.playing < server.maxPlayers then
-							table.insert(servers, server.id)
-							print("[ServerHop] Found available server:", server.id, "Players:", server.playing .. "/" .. server.maxPlayers)
-						end
-					end
-					
-					cursor = serverData.nextPageCursor or ""
-				until #servers > 0 or cursor == "" or pageCount >= maxPages
-				
-				if #servers > 0 then
-					-- Random select from available servers
-					local selectedServer = servers[math.random(1, #servers)]
-					print("[ServerHop] Selected random public server:", selectedServer, "from", #servers, "available")
-					TeleportService:TeleportToPlaceInstance(game.PlaceId, selectedServer, LocalPlayer)
-					return true
-				else
-					warn("[ServerHop] No available public servers found after checking", pageCount, "pages")
-					return false
-				end
-			end)
-			
-			if paginationSuccess then
-				print("[ServerHop] Successfully hopped to public server!")
-				return
-			end
-			
-			-- If pagination failed, show error - DO NOT use random Teleport!
-			warn("[ServerHop] CRITICAL: Pagination failed, cannot find public server!")
-			if Window then
-				Window:Notify({
-					Title = "❌ Server Hop Failed",
-					Content = "Cannot find public servers.\nPlease try again later.",
-					Icon = "rbxassetid://7733920644",
-					Duration = 5
-				})
-			end
-			return -- Abort hop to prevent going back to PS
-		end
-		
-		-- If NOT forcing public (manual hop), allow rejoin fallback
-		print("[ServerHop] Attempting fallback rejoin (forcePublic = false)")
-		local rejoinSuccess = pcall(function()
-			if isPrivateServer then
-				-- Private server - rejoin same private
-				warn("[ServerHop] Rejoining same private server")
-				local teleportOptions = Instance.new("TeleportOptions")
-				teleportOptions.ServerInstanceId = game.JobId
-				teleportOptions.ReservedServerAccessCode = game.PrivateServerId
-				TeleportService:TeleportAsync(game.PlaceId, {LocalPlayer}, teleportOptions)
-			else
-				-- Public server - rejoin via JobId
-				print("[ServerHop] Rejoining same public server")
-				TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
-			end
-		end)
-		
-		if rejoinSuccess then
-			print("[ServerHop] Rejoin successful")
-			return
-		end
-		
-		-- Fallback 2: Only for manual hop - random public teleport
-		warn("[ServerHop] Rejoin failed, using random public teleport")
-		task.wait(0.5)
-		pcall(function()
-			print("[ServerHop] Executing random public teleport")
-			TeleportService:Teleport(game.PlaceId, LocalPlayer)
-		end)
-	end
+local function notifyUser(title: string, content: string, duration: number?)
+    duration = duration or 3
+    if Window and Window.Notify then
+        Window:Notify({
+            Title = title,
+            Content = content,
+            Icon = "rbxassetid://7733920644",
+            Duration = duration,
+        })
+    else
+        print("[ServerHop] " .. title .. ": " .. content)
+    end
 end
 
+local function checkCooldown(): boolean
+    local now = tick()
+    if now - ServerHop._lastHopTime < ServerHop._cooldown then
+        notifyUser("⏳ Cooldown", "Please wait " .. math.ceil(ServerHop._cooldown - (now - ServerHop._lastHopTime)) .. "s before hopping again.", 2)
+        return false
+    end
+    return true
+end
+
+function ServerHop.Hop(reason: string?, forcePublic: boolean?)
+    if not checkCooldown() then return end
+    if ServerHop._isHopInProgress then
+        notifyUser("⏳ In Progress", "Server hop already in progress...", 2)
+        return
+    end
+
+    reason = reason or "Server hopping..."
+    forcePublic = forcePublic or false
+
+    local isPrivateServer = game.PrivateServerId ~= "" and game.PrivateServerOwnerId ~= 0
+
+    local description = reason
+    if isPrivateServer and forcePublic then
+        description = description .. "\n(Leaving private server → public)"
+    elseif isPrivateServer then
+        description = description .. "\n(Rejoining private server)"
+    end
+    notifyUser("🔄 Server Hop", description, 3)
+
+    ServerHop._isHopInProgress = true
+    task.wait(0.5)
+
+    local HttpService = game:GetService("HttpService")
+    local TeleportService = game:GetService("TeleportService")
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+    local PlaceId = game.PlaceId
+    local JobId = game.JobId
+
+    local function findPublicServer(): string?
+        local servers = {}
+        local cursor = ""
+        local pageCount = 0
+        local maxPages = 3
+
+        while pageCount < maxPages do
+            pageCount = pageCount + 1
+            local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Desc&limit=100"
+            if cursor ~= "" then
+                url = url .. "&cursor=" .. cursor
+            end
+
+            local success, response = pcall(function()
+                return game:HttpGet(url)
+            end)
+
+            if not success then
+                warn("[ServerHop] Failed to fetch server list, page", pageCount)
+                break
+            end
+
+            local ok, serverData = pcall(function()
+                return HttpService:JSONDecode(response)
+            end)
+
+            if not ok or not serverData or not serverData.data then
+                warn("[ServerHop] Invalid server data, page", pageCount)
+                break
+            end
+
+            for _, server in ipairs(serverData.data) do
+                if server.id ~= JobId and server.playing < server.maxPlayers then
+                    table.insert(servers, {
+                        id = server.id,
+                        players = server.playing,
+                        maxPlayers = server.maxPlayers,
+                    })
+                end
+            end
+
+            cursor = serverData.nextPageCursor or ""
+            if #servers > 0 then
+                break
+            end
+            task.wait(0.1)
+        end
+
+        if #servers == 0 then
+            return nil
+        end
+
+        table.sort(servers, function(a, b)
+            return a.players > b.players
+        end)
+
+        local topCount = math.min(3, #servers)
+        local selectedIdx = math.random(1, topCount)
+        return servers[selectedIdx].id
+    end
+
+    local hopSuccess = false
+
+    if forcePublic or not isPrivateServer then
+        local publicServerId = findPublicServer()
+        if publicServerId then
+            print("[ServerHop] Found public server:", publicServerId)
+            local ok = pcall(function()
+                TeleportService:TeleportToPlaceInstance(PlaceId, publicServerId, LocalPlayer)
+            end)
+            if ok then
+                hopSuccess = true
+            else
+                warn("[ServerHop] Failed to teleport to public server:", publicServerId)
+            end
+        else
+            warn("[ServerHop] No public server found")
+        end
+    end
+
+    if not hopSuccess and not forcePublic then
+        print("[ServerHop] Attempting rejoin (same server)")
+        local ok = pcall(function()
+            if isPrivateServer then
+                local teleportOptions = Instance.new("TeleportOptions")
+                teleportOptions.ServerInstanceId = JobId
+                teleportOptions.ReservedServerAccessCode = game.PrivateServerId
+                TeleportService:TeleportAsync(PlaceId, {LocalPlayer}, teleportOptions)
+            else
+                TeleportService:TeleportToPlaceInstance(PlaceId, JobId, LocalPlayer)
+            end
+        end)
+        if ok then
+            hopSuccess = true
+            print("[ServerHop] Rejoin successful")
+        else
+            warn("[ServerHop] Rejoin failed")
+        end
+    end
+
+    if not hopSuccess then
+        print("[ServerHop] Using fallback random teleport")
+        local ok = pcall(function()
+            TeleportService:Teleport(PlaceId, LocalPlayer)
+        end)
+        if ok then
+            hopSuccess = true
+            print("[ServerHop] Fallback teleport successful")
+        else
+            warn("[ServerHop] ALL STRATEGIES FAILED!")
+            notifyUser("❌ Hop Failed", "Unable to find or join a server. Please try again later.", 5)
+        end
+    end
+
+    ServerHop._lastHopTime = tick()
+    ServerHop._isHopInProgress = false
+
+    if hopSuccess then
+        notifyUser("✅ Hop Successful", "Connecting to new server...", 2)
+    end
+end
+
+-- ============================================
+-- COMPATIBILITY: Agar panggilan ServerHop(...) tetap berfungsi
+-- ============================================
+_G.ServerHop = ServerHop.Hop
 
 
 
+-- ============================================
+-- ANTI AFK (Professional Version)
+-- ============================================
 
 SettingsTab:CreateSection({ Name = "Anti AFK", Icon = "rbxassetid://7733658504" })
 
-SettingsTab:CreateToggle({
-	Name = "Anti AFK",
-	Description = "Prevents you from being kicked for idling",
-	Icon = "rbxassetid://7733658504",
-	Default = true,
-	Callback = function(value)
-		_G.AntiAFKEnabled = value
-        local GC = getconnections or get_signal_cons
-        if GC then
-            for i, v in next, GC(Players.LocalPlayer.Idled) do
-                if value then
-                    v:Disable()
+local AntiAFK = {
+    _enabled = false,
+    _connections = {},
+    _fallbackThread = nil,
+    _fallbackRunning = false,
+}
+
+-- Cek apakah getconnections tersedia
+local function hasGetConnections(): boolean
+    return type(getconnections) == "function" or type(get_signal_cons) == "function"
+end
+
+-- Dapatkan fungsi getconnections yang tersedia
+local function getConnections(signal)
+    if type(getconnections) == "function" then
+        return getconnections(signal)
+    elseif type(get_signal_cons) == "function" then
+        return get_signal_cons(signal)
+    end
+    return nil
+end
+
+-- Fungsi untuk mengaktifkan/menonaktifkan Anti AFK
+local function setAntiAFK(enabled: boolean)
+    _G.AntiAFKEnabled = enabled
+    AntiAFK._enabled = enabled
+
+    -- Metode 1: Jika getconnections tersedia, disable/enable event Idled
+    local GC = getConnections
+    if GC then
+        local idleSignal = Players.LocalPlayer.Idled
+        local conns = GC(idleSignal)
+        if conns then
+            for _, conn in pairs(conns) do
+                if enabled then
+                    pcall(conn.Disable, conn)
                 else
-                    v:Enable()
+                    pcall(conn.Enable, conn)
                 end
             end
+            print("[AntiAFK] Using getconnections method: " .. (enabled and "Enabled" or "Disabled"))
+            return
         end
-	end
+    end
+
+    -- Metode 2: Fallback - kirim input buatan setiap 30 detik
+    if enabled then
+        if AntiAFK._fallbackRunning then return end
+        AntiAFK._fallbackRunning = true
+        print("[AntiAFK] Fallback method started (simulating mouse movement)")
+
+        AntiAFK._fallbackThread = task.spawn(function()
+            local UserInputService = game:GetService("UserInputService")
+            local lastMove = 0
+            local moveInterval = 30 -- detik
+
+            while AntiAFK._fallbackRunning do
+                local now = tick()
+                if now - lastMove >= moveInterval then
+                    -- Kirim mouse movement kecil (tidak terlihat oleh player)
+                    pcall(function()
+                        local pos = UserInputService:GetMouseLocation()
+                        if pos then
+                            -- Simulasikan gerakan mouse 1 pixel ke kanan dan kembali
+                            UserInputService:SetMouseLocation(pos.X + 1, pos.Y)
+                            task.wait(0.05)
+                            UserInputService:SetMouseLocation(pos.X, pos.Y)
+                        end
+                    end)
+                    lastMove = now
+                    print("[AntiAFK] Mouse movement simulated")
+                end
+                task.wait(1)
+            end
+        end)
+    else
+        -- Matikan fallback
+        AntiAFK._fallbackRunning = false
+        if AntiAFK._fallbackThread then
+            pcall(task.cancel, AntiAFK._fallbackThread)
+            AntiAFK._fallbackThread = nil
+        end
+        print("[AntiAFK] Fallback method stopped")
+    end
+end
+
+-- Cleanup function (opsional, dipanggil saat script berhenti)
+local function cleanupAntiAFK()
+    setAntiAFK(false)
+    AntiAFK._connections = {}
+end
+
+-- Tambahkan cleanup ke _G agar bisa dipanggil dari luar jika perlu
+_G._cleanupAntiAFK = cleanupAntiAFK
+
+-- ============================================
+-- UI TOGGLE
+-- ============================================
+SettingsTab:CreateToggle({
+    Name = "Anti AFK",
+    Description = "Prevents you from being kicked for idling",
+    Icon = "rbxassetid://7733658504",
+    Default = _G.AntiAFKEnabled or true,
+    Callback = function(value)
+        setAntiAFK(value)
+    end
 })
 
 SettingsTab:CreateSection({ Name = "Anti Staff", Icon = "rbxassetid://7734053535" })
@@ -9470,12 +9596,21 @@ SettingsTab:CreateButton({
 })
 
 SettingsTab:CreateButton({
-	Name = "Server Hop",
-	SubText = "Switch to another server",
-	Icon = "rbxassetid://7733920644",
-	Callback = function()
-		ServerHop("Switching to another server...", false) -- Allow fallback rejoin
-	end
+    Name = "Server Hop",
+    SubText = "Switch to another server",
+    Icon = "rbxassetid://7733920644",
+    Callback = function()
+        ServerHop.Hop("Switching to another server...", false)
+    end
+})
+
+SettingsTab:CreateButton({
+    Name = "Force Public Server",
+    SubText = "Leave private server & join public",
+    Icon = "rbxassetid://7733920644",
+    Callback = function()
+        ServerHop.Hop("Forcing public server...", true)
+    end
 })
 
 local TabConfig = Window:CreateTab({
