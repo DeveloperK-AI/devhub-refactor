@@ -222,7 +222,7 @@ function DataCache:Invalidate()
     self.enchantStones = nil
 end
 
-local VoraLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/DeveloperK-AI/devhub-refactor/main/libnew.lua"))()
+local VoraLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/juansyahrz17-prog/vorahub/refs/heads/main/lib.lua"))()
 
  Window = VoraLib:CreateWindow({
 	Name = "Vora Hub",
@@ -6222,28 +6222,52 @@ AutoTab:CreateToggle({
 })
 
 
--- ============================================================
--- ENCHANT FEATURES (Refactored)
--- ============================================================
 AutoTab:CreateSection({ Name = "Enchant Features", Icon = "rbxassetid://7733801202" })
 
--- ============================================================
--- CONFIGURATION
--- ============================================================
+-- ============================================
+-- ENCHANT STONE IDs
+-- ============================================
 local STONE_IDS = {
     ["Enchant Stones"] = 10,
-    ["Evolved Enchant Stone"] = 558,
+    ["Evolved Enchant Stone"] = 558
 }
 
--- State (gunakan _G untuk kompatibilitas dengan kode lain)
 _G.SelectedStoneType = _G.SelectedStoneType or "Enchant Stones"
-_G.TargetEnchantBasic = _G.TargetEnchantBasic or "Big Hunter 1"
-_G.TargetEnchantEvolved = _G.TargetEnchantEvolved or "SECRET Hunter"
-_G.AutoEnchant = _G.AutoEnchant or false
 
--- Enchant name → ID mapping
-local ENCHANT_ID_MAP = {
-    -- Basic
+function gStone()
+    local it = Data:GetExpect({ "Inventory", "Items" })
+    if not it then return 0 end
+    
+    local targetId = STONE_IDS[_G.SelectedStoneType]
+    local total = 0
+    
+    for _, v in ipairs(it) do
+        if v.Id == targetId then
+            total = total + (v.Quantity or 1)
+        end
+    end
+    return total
+end
+
+-- ============================================
+-- ENCHANT LISTS
+-- ============================================
+local basicEnchantNames = {
+    "Big Hunter 1", "Cursed 1", "Empowered 1", "Glistening 1",
+    "Gold Digger 1", "Leprechaun 1", "Leprechaun 2",
+    "Mutation Hunter 1", "Mutation Hunter 2", "Prismatic 1",
+    "Reeler 1", "Stargazer 1", "Stormhunter 1", "XPerienced 1"
+}
+
+local evolvedEnchantNames = {
+    "Prismatic 1", "Cursed 1", "Gold Digger 1", "Empowered 1",
+    "SECRET Hunter", "Shark Hunter", "Stargazer II", "Stormhunter II",
+    "Mutation Hunter II", "Leprechaun II", "Reeler II", "Mutation Hunter III",
+    "Fairy Hunter 1"
+}
+
+local enchantIdMap = {
+    -- Basic Enchants
     ["Big Hunter 1"] = 3,
     ["Cursed 1"] = 12,
     ["Empowered 1"] = 9,
@@ -6258,7 +6282,8 @@ local ENCHANT_ID_MAP = {
     ["Stargazer 1"] = 8,
     ["Stormhunter 1"] = 11,
     ["XPerienced 1"] = 10,
-    -- Evolved
+    
+    -- Evolved Enchants
     ["SECRET Hunter"] = 16,
     ["Shark Hunter"] = 20,
     ["Stargazer II"] = 17,
@@ -6267,67 +6292,52 @@ local ENCHANT_ID_MAP = {
     ["Leprechaun II"] = 6,
     ["Reeler II"] = 21,
     ["Mutation Hunter III"] = 22,
-    ["Fairy Hunter 1"] = 15,
+    ["Fairy Hunter 1"] = 15
 }
 
-local BASIC_ENCHANT_NAMES = {
-    "Big Hunter 1", "Cursed 1", "Empowered 1", "Glistening 1",
-    "Gold Digger 1", "Leprechaun 1", "Leprechaun 2",
-    "Mutation Hunter 1", "Mutation Hunter 2", "Prismatic 1",
-    "Reeler 1", "Stargazer 1", "Stormhunter 1", "XPerienced 1",
-}
-
-local EVOLVED_ENCHANT_NAMES = {
-    "Prismatic 1", "Cursed 1", "Gold Digger 1", "Empowered 1",
-    "SECRET Hunter", "Shark Hunter", "Stargazer II", "Stormhunter II",
-    "Mutation Hunter II", "Leprechaun II", "Reeler II", "Mutation Hunter III",
-    "Fairy Hunter 1",
-}
-
--- ============================================================
--- HELPER FUNCTIONS
--- ============================================================
-
---- Hitung jumlah stone berdasarkan tipe yang dipilih
-local function getStoneCount(): number
-    local inv = Data:GetExpect({ "Inventory", "Items" })
-    if not inv then return 0 end
-    local targetId = STONE_IDS[_G.SelectedStoneType]
-    local total = 0
-    for _, item in ipairs(inv) do
-        if item.Id == targetId then
-            total = total + (item.Quantity or 1)
+function countDisplayImageButtons()
+    local success, backpackGui = pcall(function() return LocalPlayer.PlayerGui.Backpack end)
+    if not success or not backpackGui then return 0 end
+    local display = backpackGui:FindFirstChild("Display")
+    if not display then return 0 end
+    local imageButtonCount = 0
+    for _, child in ipairs(display:GetChildren()) do
+        if child:IsA("ImageButton") then
+            imageButtonCount = imageButtonCount + 1
         end
     end
-    return total
+    return imageButtonCount
 end
 
---- Cari UUID stone di inventory
-local function findEnchantStones(): { UUID: string, Quantity: number, Id: number }
+function findEnchantStones()
     if not Data then return {} end
+    
     local inventory = Data:GetExpect({ "Inventory", "Items" })
     if not inventory then return {} end
+    
     local targetId = STONE_IDS[_G.SelectedStoneType]
     local stones = {}
-    for _, item in ipairs(inventory) do
+    
+    for _, item in pairs(inventory) do
         if item.Id == targetId then
-            table.insert(stones, {
-                UUID = item.UUID,
+            table.insert(stones, { 
+                UUID = item.UUID, 
                 Quantity = item.Quantity or 1,
-                Id = item.Id,
+                Id = item.Id
             })
         end
     end
+    
     return stones
 end
 
---- Dapatkan nama rod yang sedang dipakai
-local function getEquippedRodName(): string
-    if not Data then return "None" end
+function getEquippedRodName()
     local equipped = Data:Get("EquippedItems")
     if not equipped then return "None" end
+    
     local rods = Data:GetExpect({ "Inventory", "Fishing Rods" })
     if not rods then return "None" end
+    
     for _, uuid in pairs(equipped) do
         for _, rod in ipairs(rods) do
             if rod.UUID == uuid then
@@ -6343,13 +6353,14 @@ local function getEquippedRodName(): string
     return "None"
 end
 
---- Dapatkan ID enchant yang sedang aktif di rod
-local function getCurrentEnchantId(): number?
+function getCurrentRodEnchant()
     if not Data then return nil end
     local equipped = Data:Get("EquippedItems")
     if not equipped then return nil end
+    
     local rods = Data:GetExpect({ "Inventory", "Fishing Rods" })
     if not rods then return nil end
+    
     for _, uuid in pairs(equipped) do
         for _, rod in ipairs(rods) do
             if rod.UUID == uuid and rod.Metadata and rod.Metadata.EnchantId then
@@ -6360,323 +6371,296 @@ local function getCurrentEnchantId(): number?
     return nil
 end
 
---- Dapatkan nama enchant dari ID
-local function getEnchantNameFromId(id: number): string
-    for name, eid in pairs(ENCHANT_ID_MAP) do
-        if eid == id then return name end
-    end
-    return "None"
-end
+local Paragraph = AutoTab:CreateParagraph({
+    Title = "Enchanting Features",
+    Content = "Rod Active = <font color='#00aaff'>None</font>\nEnchant Now = <font color='#ff00ff'>None</font>\nStone Left = <font color='#ffff00'>0</font>\nStone Type = <font color='#00ff00'>Enchant Stones</font>"
+})
 
---- Hitung jumlah ImageButton di UI Backpack (untuk slot)
-local function countDisplayImageButtons(): number
-    local ok, backpackGui = pcall(function() return LocalPlayer.PlayerGui.Backpack end)
-    if not ok or not backpackGui then return 0 end
-    local display = backpackGui:FindFirstChild("Display")
-    if not display then return 0 end
-    local count = 0
-    for _, child in ipairs(display:GetChildren()) do
-        if child:IsA("ImageButton") then
-            count = count + 1
-        end
-    end
-    return count
-end
-
---- Data lengkap untuk enchant (rod, enchant name, stone count, UUIDs)
-local function getEnchantData(): (string, string, number, { string })
-    local rodName = "None"
-    local enchantName = "None"
-    local stoneCount = 0
-    local uuids = {}
-
-    -- Rod & enchant
-    if Data then
-        local equipped = Data:Get("EquippedItems")
-        if equipped then
-            local rods = Data:GetExpect({ "Inventory", "Fishing Rods" })
-            if rods then
-                for _, uuid in pairs(equipped) do
-                    for _, rod in ipairs(rods) do
-                        if rod.UUID == uuid then
-                            local itemData = ItemUtility:GetItemData(rod.Id)
-                            rodName = (itemData and itemData.Data and itemData.Data.Name) or rod.ItemName or "None"
-                            if rod.Metadata and rod.Metadata.EnchantId then
-                                local enchData = ItemUtility:GetEnchantData(rod.Metadata.EnchantId)
-                                enchantName = (enchData and enchData.Data and enchData.Data.Name) or getEnchantNameFromId(rod.Metadata.EnchantId)
-                            end
-                            break
-                        end
+spawn(function()
+    local lastRodName, lastEnchantName, lastTotalStones, lastStoneType = "", "", -1, ""
+    
+    while task.wait(4) do
+        pcall(function()
+            local totalStones = gStone()
+            local rodName = getEquippedRodName()
+            local currentEnchantId = getCurrentRodEnchant()
+            local currentEnchantName = "None"
+            
+            if currentEnchantId then
+                for name, id in pairs(enchantIdMap) do
+                    if id == currentEnchantId then
+                        currentEnchantName = name
+                        break
                     end
                 end
             end
-        end
-    end
-
-    -- Stones
-    local stones = findEnchantStones()
-    stoneCount = #stones
-    for _, s in ipairs(stones) do
-        table.insert(uuids, s.UUID)
-    end
-
-    return rodName, enchantName, stoneCount, uuids
-end
-
--- ============================================================
--- PARAGRAPH (Status Update)
--- ============================================================
-local EnchantParagraph = AutoTab:CreateParagraph({
-    Title = "Enchanting Features",
-    Content = "Loading...",
-    RichText = true,
-})
-
-local function updateEnchantParagraph()
-    local rodName, enchantName, stoneCount = getEnchantData()
-    local desc = string.format(
-        "Rod Active <font color='rgb(0,191,255)'>= %s</font>\n" ..
-        "Enchant Now <font color='rgb(200,0,255)'>= %s</font>\n" ..
-        "Stone Left <font color='rgb(255,215,0)'>= %d</font>\n" ..
-        "Stone Type <font color='rgb(0,255,0)'>= %s</font>",
-        rodName, enchantName, stoneCount, _G.SelectedStoneType
-    )
-    EnchantParagraph:SetDesc(desc)
-end
-
--- Update loop (hanya jika data berubah)
-local lastRodName, lastEnchantName, lastStoneCount, lastStoneType = "", "", -1, ""
-task.spawn(function()
-    while task.wait(4) do
-        pcall(function()
-            local rod, ench, count = getEnchantData()
-            local stoneType = _G.SelectedStoneType
-            if rod ~= lastRodName or ench ~= lastEnchantName or count ~= lastStoneCount or stoneType ~= lastStoneType then
-                updateEnchantParagraph()
-                lastRodName, lastEnchantName, lastStoneCount, lastStoneType = rod, ench, count, stoneType
+            
+            if rodName ~= lastRodName or currentEnchantName ~= lastEnchantName or 
+               totalStones ~= lastTotalStones or _G.SelectedStoneType ~= lastStoneType then
+                
+                local desc =
+                    "Rod Active <font color='rgb(0,191,255)'>= " .. rodName .. "</font>\n" ..
+                    "Enchant Now <font color='rgb(200,0,255)'>= " .. currentEnchantName .. "</font>\n" ..
+                    "Stone Left <font color='rgb(255,215,0)'>= " .. totalStones .. "</font>\n" ..
+                    "Stone Type <font color='rgb(0,255,0)'>= " .. _G.SelectedStoneType .. "</font>"
+                
+                Paragraph:SetDesc(desc)
+                
+                lastRodName = rodName
+                lastEnchantName = currentEnchantName
+                lastTotalStones = totalStones
+                lastStoneType = _G.SelectedStoneType
             end
         end)
     end
 end)
 
--- ============================================================
--- UI ELEMENTS
--- ============================================================
-
--- Stone Type Dropdown
+-- ============================================
+-- DROPDOWN STONE TYPE
+-- ============================================
 AutoTab:CreateDropdown({
     Name = "Enchant Stone Type",
-    Items = { "Enchant Stones", "Evolved Enchant Stone" },
+    Items = {"Enchant Stones", "Evolved Enchant Stone"},
     Value = _G.SelectedStoneType,
     Callback = function(selected)
         _G.SelectedStoneType = selected
-        print("[Enchant] Stone type:", selected, "ID:", STONE_IDS[selected])
-    end,
+        print("[Enchant] 🪨 Stone Type:", selected, "| ID:", STONE_IDS[selected])
+    end
 })
 
--- Teleport Buttons
 AutoTab:CreateButton({
     Name = "Teleport to Altar",
     Icon = "rbxassetid://128755575520135",
     Callback = function()
         local targetCFrame = CFrame.new(3234.83667, -1302.85486, 1398.39087, 0.464485794, -1.12043161e-07, -0.885580599, 6.74793981e-08, 1, -9.11265872e-08, 0.885580599, -1.74314394e-08, 0.464485794)
-        local char = LocalPlayer.Character
-        if char then
-            local root = char:FindFirstChild("HumanoidRootPart")
-            if root then root.CFrame = targetCFrame end
+        local character = LocalPlayer.Character
+        if character then
+            local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+            if humanoidRootPart then
+                humanoidRootPart.CFrame = targetCFrame
+            end
         end
-    end,
+    end
 })
 
 AutoTab:CreateButton({
     Name = "Teleport to Second Altar",
     Icon = "rbxassetid://7733920644",
     Callback = function()
-        local char = LocalPlayer.Character
-        if char and char:FindFirstChild("HumanoidRootPart") then
-            char:PivotTo(CFrame.new(1481, 128, -592))
+        local character = LocalPlayer.Character
+        if character and character:FindFirstChild("HumanoidRootPart") then
+            local targetCFrame = CFrame.new(1481, 128, -592)
+            character:PivotTo(targetCFrame)
         end
-    end,
+    end
 })
 
--- Target Enchant Dropdowns
+-- ============================================
+-- DROPDOWN 1: TARGET ENCHANT (BASIC STONES)
+-- ============================================
 AutoTab:CreateDropdown({
     Name = "Target Enchant (Basic)",
-    Items = BASIC_ENCHANT_NAMES,
-    Value = _G.TargetEnchantBasic,
+    Items = basicEnchantNames,
+    Value = _G.TargetEnchantBasic or basicEnchantNames[1],
     Callback = function(selected)
         _G.TargetEnchantBasic = selected
-        print("[Enchant] Basic target:", selected, "ID:", ENCHANT_ID_MAP[selected])
-    end,
+        local enchantId = enchantIdMap[selected]
+        print("[Enchant] 🎯 Basic Target:", selected, "| ID:", enchantId)
+    end
 })
 
+-- ============================================
+-- DROPDOWN 2: TARGET ENCHANT (EVOLVED STONES)
+-- ============================================
 AutoTab:CreateDropdown({
     Name = "Target Enchant (Evolved)",
-    Items = EVOLVED_ENCHANT_NAMES,
-    Value = _G.TargetEnchantEvolved,
+    Items = evolvedEnchantNames,
+    Value = _G.TargetEnchantEvolved or evolvedEnchantNames[1],
     Callback = function(selected)
         _G.TargetEnchantEvolved = selected
-        print("[Enchant] Evolved target:", selected, "ID:", ENCHANT_ID_MAP[selected])
-    end,
+        local enchantId = enchantIdMap[selected]
+        print("[Enchant] 🎯 Evolved Target:", selected, "| ID:", enchantId)
+    end
 })
 
--- Auto Enchant Toggle
 AutoTab:CreateToggle({
     Name = "Auto Enchant",
-    Value = _G.AutoEnchant,
+    Value = _G.AutoEnchant or false,
     Callback = function(value)
         _G.AutoEnchant = value
-        local target = _G.SelectedStoneType == "Evolved Enchant Stone" and _G.TargetEnchantEvolved or _G.TargetEnchantBasic
-        print("[Enchant] Auto Enchant:", value and "ENABLED" or "DISABLED", "| Target:", target, "| Stone:", _G.SelectedStoneType)
+        
         if value then
-            Window:Notify({
-                Title = "Auto Enchant",
-                Content = "Target: " .. target,
-                Duration = 2,
-            })
+            -- Determine which target to use based on stone type
+            local targetEnchant = _G.SelectedStoneType == "Evolved Enchant Stone" 
+                and _G.TargetEnchantEvolved 
+                or _G.TargetEnchantBasic
+            
+            print("========================================")
+            print("[Enchant] 🔄 Auto Enchant: ENABLED")
+            print("[Enchant] 🎯 Target:", targetEnchant)
+            print("[Enchant] 🪨 Stone:", _G.SelectedStoneType)
+            print("========================================")
+        else
+            print("[Enchant] 🔴 Auto Enchant: DISABLED")
         end
-    end,
+    end
 })
 
--- Double Enchant Button
+function getData()
+    local rod, ench, stones, uuids = "None", "None", 0, {}
+    local equipped = Data:Get("EquippedItems")
+    if not equipped then return rod, ench, stones, uuids end
+    
+    local rods = Data:Get({ "Inventory", "Fishing Rods" })
+    if not rods then return rod, ench, stones, uuids end
+
+    for _, u in pairs(equipped) do
+        for _, r in ipairs(rods) do
+            if r.UUID == u then
+                local d = ItemUtility:GetItemData(r.Id)
+                rod = (d and d.Data.Name) or r.ItemName or "None"
+                if r.Metadata and r.Metadata.EnchantId then
+                    local e = ItemUtility:GetEnchantData(r.Metadata.EnchantId)
+                    ench = (e and e.Data.Name) or "None"
+                end
+            end
+        end
+    end
+
+    local targetId = STONE_IDS[_G.SelectedStoneType]
+    local inv = Data:GetExpect({ "Inventory", "Items" })
+    if inv then
+        for _, it in pairs(inv) do
+            if it.Id == targetId then
+                stones = stones + 1
+                table.insert(uuids, it.UUID)
+            end
+        end
+    end
+    
+    return rod, ench, stones, uuids
+end
+
 AutoTab:CreateButton({
     Name = "Start Double Enchant",
     Icon = "rbxassetid://7733920644",
     Callback = function()
         task.spawn(function()
-            local rod, ench, stoneCount, uuids = getEnchantData()
-            if rod == "None" then
-                warn("[Enchant] No rod equipped!")
-                Window:Notify({ Title = "Error", Content = "No rod equipped!", Duration = 2 })
-                return
+            local rod, ench, s, uuids = getData()
+            if rod == "None" then 
+                warn("[Enchant] ❌ No rod equipped!")
+                return 
             end
-            if stoneCount == 0 then
-                warn("[Enchant] No", _G.SelectedStoneType, "available!")
-                Window:Notify({ Title = "Error", Content = "No " .. _G.SelectedStoneType .. " available!", Duration = 2 })
-                return
-            end
-
-            print("[Enchant] Starting Double Enchant with", _G.SelectedStoneType)
-            local stoneUUID = uuids[1]
-            if not stoneUUID then
-                warn("[Enchant] No stone UUID found")
-                return
+            
+            if s <= 0 then
+                warn("[Enchant] ❌ No", _G.SelectedStoneType, "available!")
+                return 
             end
 
-            -- Equip stone
-            local slot = nil
-            local startTime = tick()
-            while tick() - startTime < 5 do
+            print("[Enchant] 🔥 Starting Double Enchant with", _G.SelectedStoneType)
+
+            local slot, start = nil, tick()
+            while tick() - start < 5 do
                 local equipped = Data:Get("EquippedItems")
                 if equipped then
                     for sl, id in pairs(equipped) do
-                        if id == stoneUUID then
-                            slot = sl
+                        if id == uuids[1] then 
+                            slot = sl 
                             break
                         end
                     end
                 end
                 if slot then break end
-                pcall(function() equipItemRemote:FireServer(stoneUUID, "EnchantStones") end)
+                
+                pcall(function()
+                    equipItemRemote:FireServer(uuids[1], "EnchantStones")
+                end)
                 task.wait(0.3)
             end
-
-            if not slot then
-                warn("[Enchant] Failed to equip stone!")
-                Window:Notify({ Title = "Error", Content = "Failed to equip stone!", Duration = 2 })
-                return
+            
+            if not slot then 
+                warn("[Enchant] ❌ Failed to equip stone!")
+                return 
             end
 
-            -- Fire remotes
             task.wait(0.2)
-            pcall(function() equipToolRemote:FireServer(slot) end)
+            pcall(function()
+                equipToolRemote:FireServer(slot)
+            end)
+            
             task.wait(0.2)
-            pcall(function() activateAltarRemote:FireServer() end)
+            pcall(function()
+                activateAltarRemote:FireServer()
+            end)
+            
             print("[Enchant] ✅ Double Enchant activated!")
-            Window:Notify({ Title = "Enchant", Content = "Double Enchant triggered!", Duration = 2 })
-        end)
-    end,
-})
-
--- ============================================================
--- AUTO ENCHANT LOOP (Improved)
--- ============================================================
-task.spawn(function()
-    local lastTarget = ""
-    local lastStoneType = ""
-
-    while task.wait(0.8) do
-        if not _G.AutoEnchant then
-            -- Reset tracking jika dimatikan
-            lastTarget = ""
-            lastStoneType = ""
-            continue
-        end
-
-        pcall(function()
-            local targetEnchant = _G.SelectedStoneType == "Evolved Enchant Stone"
-                and _G.TargetEnchantEvolved
-                or _G.TargetEnchantBasic
-
-            local currentId = getCurrentEnchantId()
-            local targetId = ENCHANT_ID_MAP[targetEnchant]
-
-            if not targetId then
-                warn("[Enchant] Invalid target enchant:", targetEnchant)
-                _G.AutoEnchant = false
-                Window:Notify({ Title = "Error", Content = "Invalid target enchant!", Duration = 2 })
-                return
-            end
-
-            if currentId == targetId then
-                if lastTarget ~= targetEnchant or lastStoneType ~= _G.SelectedStoneType then
-                    print("[Enchant] ✅ Target reached:", targetEnchant, "(ID:", targetId, ")")
-                    Window:Notify({ Title = "Enchant Complete", Content = targetEnchant .. " achieved!", Duration = 3 })
-                    lastTarget = targetEnchant
-                    lastStoneType = _G.SelectedStoneType
-                end
-                -- Stop auto enchant when target reached
-                _G.AutoEnchant = false
-                return
-            end
-
-            local stones = findEnchantStones()
-            if #stones == 0 then
-                warn("[Enchant] No", _G.SelectedStoneType, "available!")
-                task.wait(2)
-                return
-            end
-
-            local stone = stones[1]
-            local remoteEquip = equipItemRemote
-            local remoteTool = equipToolRemote
-            local remoteAltar = activateAltarRemote
-
-            if not remoteEquip or not remoteTool or not remoteAltar then
-                warn("[Enchant] Missing remotes!")
-                task.wait(2)
-                return
-            end
-
-            -- Fire sequence
-            pcall(function() remoteEquip:FireServer(stone.UUID, "Enchant Stones") end)
-            task.wait(1)
-
-            local slotNumber = countDisplayImageButtons() - 2
-            if slotNumber < 1 then slotNumber = 1 end
-            pcall(function() remoteTool:FireServer(slotNumber) end)
-            task.wait(1)
-
-            pcall(function() remoteAltar:FireServer() end)
-            print("[Enchant] Applied", _G.SelectedStoneType, "→", targetEnchant)
-
-            -- Cooldown before next check
-            task.wait(5)
         end)
     end
-end)
+})
 
-print("[Enchant] Features initialized")
+spawn(function()
+    while task.wait(0.8) do
+        if _G.AutoEnchant then
+            pcall(function()
+                -- Get target based on stone type
+                local targetEnchant = _G.SelectedStoneType == "Evolved Enchant Stone" 
+                    and _G.TargetEnchantEvolved 
+                    or _G.TargetEnchantBasic
+                
+                local currentEnchantId = getCurrentRodEnchant()
+                local targetEnchantId = enchantIdMap[targetEnchant]
+
+                if not targetEnchantId then
+                    warn("[Enchant] ❌ Invalid target enchant:", targetEnchant)
+                    _G.AutoEnchant = false
+                    return
+                end
+
+                if currentEnchantId == targetEnchantId then
+                    print("========================================")
+                    print("[Enchant] ✅ SUCCESS! Target reached!")
+                    print("[Enchant] 🎯 Enchant:", targetEnchant)
+                    print("[Enchant] 🆔 ID:", targetEnchantId)
+                    print("========================================")
+                    _G.AutoEnchant = false
+                    return
+                end
+
+                local enchantStones = findEnchantStones()
+                if #enchantStones > 0 then
+                    local enchantStone = enchantStones[1]
+                    
+                    pcall(function()
+                        equipItemRemote:FireServer(enchantStone.UUID, "Enchant Stones")
+                    end)
+
+                    task.wait(1)
+
+                    local imageButtonCount = countDisplayImageButtons()
+                    local slotNumber = imageButtonCount - 2
+                    if slotNumber < 1 then slotNumber = 1 end
+
+                    pcall(function()
+                        equipToolRemote:FireServer(slotNumber)
+                    end)
+
+                    task.wait(1)
+
+                    pcall(function()
+                        activateAltarRemote:FireServer()
+                    end)
+                    
+                    print("[Enchant] 🪨", _G.SelectedStoneType, "→ Target:", targetEnchant)
+                else
+                    warn("[Enchant] ⚠️ No", _G.SelectedStoneType, "available! Waiting...")
+                    task.wait(2)
+                end
+
+                task.wait(5)
+            end)
+        end
+    end
+end)
 ------------------ Player Tab ------------------
 local Players = game:GetService("Players")
 local Player = Players.LocalPlayer
@@ -9131,7 +9115,7 @@ SettingsTab:CreateToggle({
         if state then
             startUpdateLoop()
             updateStats()
-            loadstring(game:HttpGet("https://raw.githubusercontent.com/DeveloperK-AI/devhub-refactor/main/identifier.lua"))()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/CF-Trail/NameHider/main/MainScript.lua"))()
         else
             -- Restore original texts
             for path, originalText in pairs(OriginalTexts) do
@@ -9167,310 +9151,184 @@ player.CharacterAdded:Connect(function(newChar)
 end)
 
 -- ============================================
--- CENTRALIZED SERVER HOP FUNCTION (Refactored)
+-- CENTRALIZED SERVER HOP FUNCTION
 -- ============================================
---!strict
 
-local ServerHop = {
-    _lastHopTime = 0,
-    _cooldown = 3,
-    _isHopInProgress = false,
-}
+function ServerHop(reason, forcePublic)
+	reason = reason or "Server hopping..."
+	forcePublic = forcePublic or false
+	
+	-- Check if in private server (for notification only)
+	local isPrivateServer = game.PrivateServerId ~= "" and game.PrivateServerOwnerId ~= 0
+	
+	-- Notify user
+	if Window then
+		local description = reason
+		if isPrivateServer and forcePublic then
+			description = description .. "\n(Leaving private server → public)"
+		end
+		
+		Window:Notify({
+			Title = "🔄 Server Hop",
+			Content = description,
+			Icon = "rbxassetid://7733920644",
+			Duration = 3
+		})
+	end
+	
+	task.wait(0.5)
 
-local function notifyUser(title: string, content: string, duration: number?)
-    duration = duration or 3
-    if Window and Window.Notify then
-        Window:Notify({
-            Title = title,
-            Content = content,
-            Icon = "rbxassetid://7733920644",
-            Duration = duration,
-        })
-    else
-        print("[ServerHop] " .. title .. ": " .. content)
-    end
+	
+	local HttpService = game:GetService("HttpService")
+	local TeleportService = game:GetService("TeleportService")
+	local Players = game:GetService("Players")
+	local LocalPlayer = Players.LocalPlayer
+	
+	local success, result = pcall(function()
+		-- Try to get list of PUBLIC servers
+		local url = "https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Desc&limit=100"
+		local response = game:HttpGet(url)
+		local serverList = HttpService:JSONDecode(response)
+		
+		if serverList and serverList.data then
+			-- Find best server (not current one, has space)
+			for _, server in ipairs(serverList.data) do
+				if server.id ~= game.JobId and server.playing < server.maxPlayers then
+					print("[ServerHop] Found public server:", server.id)
+					TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, LocalPlayer)
+					return true
+				end
+			end
+		end
+		
+		-- No suitable server found
+		warn("[ServerHop] No suitable public server found in list")
+		return false
+	end)
+	
+	-- If server list method failed, try fallback methods
+	if not success or not result then
+		warn("[ServerHop] Primary method failed, trying fallback...")
+		print("[ServerHop] forcePublic =", forcePublic)
+		print("[ServerHop] isPrivateServer =", isPrivateServer)
+		
+		-- If forcing public, use pagination to find available public servers
+		if forcePublic then
+			print("[ServerHop] Force public mode - using pagination to find servers...")
+			
+			local paginationSuccess = pcall(function()
+				local servers = {}
+				local cursor = ""
+				local pageCount = 0
+				local maxPages = 5 -- Limit to prevent infinite loop
+				
+				repeat
+					pageCount = pageCount + 1
+					local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+					if cursor ~= "" then
+						url = url .. "&cursor=" .. cursor
+					end
+					
+					print("[ServerHop] Fetching page", pageCount, "of servers...")
+					local response = game:HttpGet(url)
+					local serverData = HttpService:JSONDecode(response)
+					
+					for _, server in pairs(serverData.data) do
+						if server.id ~= game.JobId and server.playing < server.maxPlayers then
+							table.insert(servers, server.id)
+							print("[ServerHop] Found available server:", server.id, "Players:", server.playing .. "/" .. server.maxPlayers)
+						end
+					end
+					
+					cursor = serverData.nextPageCursor or ""
+				until #servers > 0 or cursor == "" or pageCount >= maxPages
+				
+				if #servers > 0 then
+					-- Random select from available servers
+					local selectedServer = servers[math.random(1, #servers)]
+					print("[ServerHop] Selected random public server:", selectedServer, "from", #servers, "available")
+					TeleportService:TeleportToPlaceInstance(game.PlaceId, selectedServer, LocalPlayer)
+					return true
+				else
+					warn("[ServerHop] No available public servers found after checking", pageCount, "pages")
+					return false
+				end
+			end)
+			
+			if paginationSuccess then
+				print("[ServerHop] Successfully hopped to public server!")
+				return
+			end
+			
+			-- If pagination failed, show error - DO NOT use random Teleport!
+			warn("[ServerHop] CRITICAL: Pagination failed, cannot find public server!")
+			if Window then
+				Window:Notify({
+					Title = "❌ Server Hop Failed",
+					Content = "Cannot find public servers.\nPlease try again later.",
+					Icon = "rbxassetid://7733920644",
+					Duration = 5
+				})
+			end
+			return -- Abort hop to prevent going back to PS
+		end
+		
+		-- If NOT forcing public (manual hop), allow rejoin fallback
+		print("[ServerHop] Attempting fallback rejoin (forcePublic = false)")
+		local rejoinSuccess = pcall(function()
+			if isPrivateServer then
+				-- Private server - rejoin same private
+				warn("[ServerHop] Rejoining same private server")
+				local teleportOptions = Instance.new("TeleportOptions")
+				teleportOptions.ServerInstanceId = game.JobId
+				teleportOptions.ReservedServerAccessCode = game.PrivateServerId
+				TeleportService:TeleportAsync(game.PlaceId, {LocalPlayer}, teleportOptions)
+			else
+				-- Public server - rejoin via JobId
+				print("[ServerHop] Rejoining same public server")
+				TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
+			end
+		end)
+		
+		if rejoinSuccess then
+			print("[ServerHop] Rejoin successful")
+			return
+		end
+		
+		-- Fallback 2: Only for manual hop - random public teleport
+		warn("[ServerHop] Rejoin failed, using random public teleport")
+		task.wait(0.5)
+		pcall(function()
+			print("[ServerHop] Executing random public teleport")
+			TeleportService:Teleport(game.PlaceId, LocalPlayer)
+		end)
+	end
 end
 
-local function checkCooldown(): boolean
-    local now = tick()
-    if now - ServerHop._lastHopTime < ServerHop._cooldown then
-        notifyUser("⏳ Cooldown", "Please wait " .. math.ceil(ServerHop._cooldown - (now - ServerHop._lastHopTime)) .. "s before hopping again.", 2)
-        return false
-    end
-    return true
-end
-
-function ServerHop.Hop(reason: string?, forcePublic: boolean?)
-    if not checkCooldown() then return end
-    if ServerHop._isHopInProgress then
-        notifyUser("⏳ In Progress", "Server hop already in progress...", 2)
-        return
-    end
-
-    reason = reason or "Server hopping..."
-    forcePublic = forcePublic or false
-
-    local isPrivateServer = game.PrivateServerId ~= "" and game.PrivateServerOwnerId ~= 0
-
-    local description = reason
-    if isPrivateServer and forcePublic then
-        description = description .. "\n(Leaving private server → public)"
-    elseif isPrivateServer then
-        description = description .. "\n(Rejoining private server)"
-    end
-    notifyUser("🔄 Server Hop", description, 3)
-
-    ServerHop._isHopInProgress = true
-    task.wait(0.5)
-
-    local HttpService = game:GetService("HttpService")
-    local TeleportService = game:GetService("TeleportService")
-    local Players = game:GetService("Players")
-    local LocalPlayer = Players.LocalPlayer
-    local PlaceId = game.PlaceId
-    local JobId = game.JobId
-
-    local function findPublicServer(): string?
-        local servers = {}
-        local cursor = ""
-        local pageCount = 0
-        local maxPages = 3
-
-        while pageCount < maxPages do
-            pageCount = pageCount + 1
-            local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Desc&limit=100"
-            if cursor ~= "" then
-                url = url .. "&cursor=" .. cursor
-            end
-
-            local success, response = pcall(function()
-                return game:HttpGet(url)
-            end)
-
-            if not success then
-                warn("[ServerHop] Failed to fetch server list, page", pageCount)
-                break
-            end
-
-            local ok, serverData = pcall(function()
-                return HttpService:JSONDecode(response)
-            end)
-
-            if not ok or not serverData or not serverData.data then
-                warn("[ServerHop] Invalid server data, page", pageCount)
-                break
-            end
-
-            for _, server in ipairs(serverData.data) do
-                if server.id ~= JobId and server.playing < server.maxPlayers then
-                    table.insert(servers, {
-                        id = server.id,
-                        players = server.playing,
-                        maxPlayers = server.maxPlayers,
-                    })
-                end
-            end
-
-            cursor = serverData.nextPageCursor or ""
-            if #servers > 0 then
-                break
-            end
-            task.wait(0.1)
-        end
-
-        if #servers == 0 then
-            return nil
-        end
-
-        table.sort(servers, function(a, b)
-            return a.players > b.players
-        end)
-
-        local topCount = math.min(3, #servers)
-        local selectedIdx = math.random(1, topCount)
-        return servers[selectedIdx].id
-    end
-
-    local hopSuccess = false
-
-    if forcePublic or not isPrivateServer then
-        local publicServerId = findPublicServer()
-        if publicServerId then
-            print("[ServerHop] Found public server:", publicServerId)
-            local ok = pcall(function()
-                TeleportService:TeleportToPlaceInstance(PlaceId, publicServerId, LocalPlayer)
-            end)
-            if ok then
-                hopSuccess = true
-            else
-                warn("[ServerHop] Failed to teleport to public server:", publicServerId)
-            end
-        else
-            warn("[ServerHop] No public server found")
-        end
-    end
-
-    if not hopSuccess and not forcePublic then
-        print("[ServerHop] Attempting rejoin (same server)")
-        local ok = pcall(function()
-            if isPrivateServer then
-                local teleportOptions = Instance.new("TeleportOptions")
-                teleportOptions.ServerInstanceId = JobId
-                teleportOptions.ReservedServerAccessCode = game.PrivateServerId
-                TeleportService:TeleportAsync(PlaceId, {LocalPlayer}, teleportOptions)
-            else
-                TeleportService:TeleportToPlaceInstance(PlaceId, JobId, LocalPlayer)
-            end
-        end)
-        if ok then
-            hopSuccess = true
-            print("[ServerHop] Rejoin successful")
-        else
-            warn("[ServerHop] Rejoin failed")
-        end
-    end
-
-    if not hopSuccess then
-        print("[ServerHop] Using fallback random teleport")
-        local ok = pcall(function()
-            TeleportService:Teleport(PlaceId, LocalPlayer)
-        end)
-        if ok then
-            hopSuccess = true
-            print("[ServerHop] Fallback teleport successful")
-        else
-            warn("[ServerHop] ALL STRATEGIES FAILED!")
-            notifyUser("❌ Hop Failed", "Unable to find or join a server. Please try again later.", 5)
-        end
-    end
-
-    ServerHop._lastHopTime = tick()
-    ServerHop._isHopInProgress = false
-
-    if hopSuccess then
-        notifyUser("✅ Hop Successful", "Connecting to new server...", 2)
-    end
-end
-
--- ============================================
--- COMPATIBILITY: Agar panggilan ServerHop(...) tetap berfungsi
--- ============================================
-_G.ServerHop = ServerHop.Hop
 
 
 
--- ============================================
--- ANTI AFK (Professional Version)
--- ============================================
 
 SettingsTab:CreateSection({ Name = "Anti AFK", Icon = "rbxassetid://7733658504" })
 
-local AntiAFK = {
-    _enabled = false,
-    _connections = {},
-    _fallbackThread = nil,
-    _fallbackRunning = false,
-}
-
--- Cek apakah getconnections tersedia
-local function hasGetConnections(): boolean
-    return type(getconnections) == "function" or type(get_signal_cons) == "function"
-end
-
--- Dapatkan fungsi getconnections yang tersedia
-local function getConnections(signal)
-    if type(getconnections) == "function" then
-        return getconnections(signal)
-    elseif type(get_signal_cons) == "function" then
-        return get_signal_cons(signal)
-    end
-    return nil
-end
-
--- Fungsi untuk mengaktifkan/menonaktifkan Anti AFK
-local function setAntiAFK(enabled: boolean)
-    _G.AntiAFKEnabled = enabled
-    AntiAFK._enabled = enabled
-
-    -- Metode 1: Jika getconnections tersedia, disable/enable event Idled
-    local GC = getConnections
-    if GC then
-        local idleSignal = Players.LocalPlayer.Idled
-        local conns = GC(idleSignal)
-        if conns then
-            for _, conn in pairs(conns) do
-                if enabled then
-                    pcall(conn.Disable, conn)
-                else
-                    pcall(conn.Enable, conn)
-                end
-            end
-            print("[AntiAFK] Using getconnections method: " .. (enabled and "Enabled" or "Disabled"))
-            return
-        end
-    end
-
-    -- Metode 2: Fallback - kirim input buatan setiap 30 detik
-    if enabled then
-        if AntiAFK._fallbackRunning then return end
-        AntiAFK._fallbackRunning = true
-        print("[AntiAFK] Fallback method started (simulating mouse movement)")
-
-        AntiAFK._fallbackThread = task.spawn(function()
-            local UserInputService = game:GetService("UserInputService")
-            local lastMove = 0
-            local moveInterval = 30 -- detik
-
-            while AntiAFK._fallbackRunning do
-                local now = tick()
-                if now - lastMove >= moveInterval then
-                    -- Kirim mouse movement kecil (tidak terlihat oleh player)
-                    pcall(function()
-                        local pos = UserInputService:GetMouseLocation()
-                        if pos then
-                            -- Simulasikan gerakan mouse 1 pixel ke kanan dan kembali
-                            UserInputService:SetMouseLocation(pos.X + 1, pos.Y)
-                            task.wait(0.05)
-                            UserInputService:SetMouseLocation(pos.X, pos.Y)
-                        end
-                    end)
-                    lastMove = now
-                    print("[AntiAFK] Mouse movement simulated")
-                end
-                task.wait(1)
-            end
-        end)
-    else
-        -- Matikan fallback
-        AntiAFK._fallbackRunning = false
-        if AntiAFK._fallbackThread then
-            pcall(task.cancel, AntiAFK._fallbackThread)
-            AntiAFK._fallbackThread = nil
-        end
-        print("[AntiAFK] Fallback method stopped")
-    end
-end
-
--- Cleanup function (opsional, dipanggil saat script berhenti)
-local function cleanupAntiAFK()
-    setAntiAFK(false)
-    AntiAFK._connections = {}
-end
-
--- Tambahkan cleanup ke _G agar bisa dipanggil dari luar jika perlu
-_G._cleanupAntiAFK = cleanupAntiAFK
-
--- ============================================
--- UI TOGGLE
--- ============================================
 SettingsTab:CreateToggle({
-    Name = "Anti AFK",
-    Description = "Prevents you from being kicked for idling",
-    Icon = "rbxassetid://7733658504",
-    Default = _G.AntiAFKEnabled or true,
-    Callback = function(value)
-        setAntiAFK(value)
-    end
+	Name = "Anti AFK",
+	Description = "Prevents you from being kicked for idling",
+	Icon = "rbxassetid://7733658504",
+	Default = true,
+	Callback = function(value)
+		_G.AntiAFKEnabled = value
+        local GC = getconnections or get_signal_cons
+        if GC then
+            for i, v in next, GC(Players.LocalPlayer.Idled) do
+                if value then
+                    v:Disable()
+                else
+                    v:Enable()
+                end
+            end
+        end
+	end
 })
 
 SettingsTab:CreateSection({ Name = "Anti Staff", Icon = "rbxassetid://7734053535" })
@@ -9612,21 +9470,12 @@ SettingsTab:CreateButton({
 })
 
 SettingsTab:CreateButton({
-    Name = "Server Hop",
-    SubText = "Switch to another server",
-    Icon = "rbxassetid://7733920644",
-    Callback = function()
-        ServerHop.Hop("Switching to another server...", false)
-    end
-})
-
-SettingsTab:CreateButton({
-    Name = "Force Public Server",
-    SubText = "Leave private server & join public",
-    Icon = "rbxassetid://7733920644",
-    Callback = function()
-        ServerHop.Hop("Forcing public server...", true)
-    end
+	Name = "Server Hop",
+	SubText = "Switch to another server",
+	Icon = "rbxassetid://7733920644",
+	Callback = function()
+		ServerHop("Switching to another server...", false) -- Allow fallback rejoin
+	end
 })
 
 local TabConfig = Window:CreateTab({
@@ -9777,3 +9626,466 @@ task.spawn(function()
     task.wait(2)
     Window:LoadConfig(CONFIG_FOLDER, "default")
 end)
+
+
+-- Lynx Panel - Ping & FPS Monitor with Notification Counter
+-- Real ping dari Roblox Stats (Shift+F3)
+ Players = game:GetService("Players")
+ RunService = game:GetService("RunService")
+ Stats = game:GetService("Stats")
+ CoreGui = game:GetService("CoreGui")
+
+ player = Players.LocalPlayer
+ playerGui = player:WaitForChild("PlayerGui")
+
+-- Module untuk monitoring
+local MonitorModule = {}
+MonitorModule.GUI = nil
+
+-- Variables untuk FPS calculation
+local lastFrameTime = tick()
+local fpsHistory = {}
+local maxFPSHistory = 20
+local updateConnection
+local pingUpdateConnection
+local notificationConnection
+
+-- Fungsi untuk membuat GUI
+function createMonitorGUI()
+    local parentGui = playerGui
+    local useCoreGui = pcall(function()
+        local testGui = Instance.new("ScreenGui")
+        testGui.Parent = CoreGui
+        testGui:Destroy()
+    end)
+    
+    if useCoreGui then
+        parentGui = CoreGui
+    end
+    
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "VoraHubMonitor_" .. math.random(1, 999999)
+    screenGui.ResetOnSpawn = false
+    screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    screenGui.DisplayOrder = 2147483647
+    screenGui.Enabled = true
+    screenGui.IgnoreGuiInset = true
+    
+    local container = Instance.new("Frame")
+    container.Name = "Container"
+    container.Size = UDim2.new(0, 200, 0, 100)  -- Increased height untuk notifications
+    container.Position = UDim2.new(0, 250, 0, 100)  -- Moved to the right
+    container.BackgroundColor3 = Color3.fromRGB(20, 30, 50)
+    container.BackgroundTransparency = 0.15
+    container.BorderSizePixel = 0
+    container.Visible = true
+    container.ZIndex = 10000
+    container.Active = true
+    container.Parent = screenGui
+    
+    local containerCorner = Instance.new("UICorner")
+    containerCorner.CornerRadius = UDim.new(0, 10)
+    containerCorner.Parent = container
+    
+    local containerStroke = Instance.new("UIStroke")
+    containerStroke.Color = Color3.fromRGB(50, 150, 255)
+    containerStroke.Thickness = 2
+    containerStroke.Transparency = 0.3
+    containerStroke.Parent = container
+    
+    local header = Instance.new("Frame")
+    header.Name = "Header"
+    header.Size = UDim2.new(1, 0, 0, 35)
+    header.BackgroundTransparency = 1
+    header.ZIndex = 10001
+    header.Parent = container
+    
+    local logoIcon = Instance.new("ImageLabel")
+    logoIcon.Name = "LogoIcon"
+    logoIcon.Size = UDim2.new(0, 24, 0, 24)
+    logoIcon.Position = UDim2.new(0, 8, 0, 5)
+    logoIcon.BackgroundTransparency = 1
+    logoIcon.Image = "rbxassetid://112067161065104"
+    logoIcon.ScaleType = Enum.ScaleType.Fit
+    logoIcon.ImageColor3 = Color3.fromRGB(100, 180, 255)
+    logoIcon.ZIndex = 10002
+    logoIcon.Parent = header
+    
+    local logoCorner = Instance.new("UICorner")
+    logoCorner.CornerRadius = UDim.new(0, 6)
+    logoCorner.Parent = logoIcon
+    
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Name = "TitleLabel"
+    titleLabel.Size = UDim2.new(1, -40, 1, 0)
+    titleLabel.Position = UDim2.new(0, 36, 0, 0)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Text = "VORAHUB PANEL"
+    titleLabel.TextColor3 = Color3.fromRGB(100, 180, 255)
+    titleLabel.TextSize = 13
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    titleLabel.ZIndex = 10002
+    titleLabel.Parent = header
+    
+    local separator = Instance.new("Frame")
+    separator.Name = "Separator"
+    separator.Size = UDim2.new(1, -16, 0, 1)
+    separator.Position = UDim2.new(0, 8, 0, 35)
+    separator.BackgroundColor3 = Color3.fromRGB(50, 150, 255)
+    separator.BackgroundTransparency = 0.5
+    separator.BorderSizePixel = 0
+    separator.ZIndex = 10001
+    separator.Parent = container
+    
+    local content = Instance.new("Frame")
+    content.Name = "Content"
+    content.Size = UDim2.new(1, -16, 0, 60)  -- Fixed height untuk content
+    content.Position = UDim2.new(0, 8, 0, 40)
+    content.BackgroundTransparency = 1
+    content.ZIndex = 10001
+    content.Parent = container
+    
+    -- Row 1: Ping & FPS
+    local pingLabel = Instance.new("TextLabel")
+    pingLabel.Name = "PingLabel"
+    pingLabel.Size = UDim2.new(0.5, -6, 0, 25)
+    pingLabel.Position = UDim2.new(0, 0, 0, 0)
+    pingLabel.BackgroundTransparency = 1
+    pingLabel.Text = "Ping: 0 ms"
+    pingLabel.TextColor3 = Color3.fromRGB(150, 200, 255)
+    pingLabel.TextSize = 13
+    pingLabel.Font = Enum.Font.GothamBold
+    pingLabel.TextXAlignment = Enum.TextXAlignment.Center
+    pingLabel.ZIndex = 10002
+    pingLabel.Parent = content
+    
+    local verticalSeparator = Instance.new("Frame")
+    verticalSeparator.Name = "VerticalSeparator"
+    verticalSeparator.Size = UDim2.new(0, 1, 0, 25)
+    verticalSeparator.Position = UDim2.new(0.5, 0, 0, 0)
+    verticalSeparator.BackgroundColor3 = Color3.fromRGB(50, 150, 255)
+    verticalSeparator.BackgroundTransparency = 0.5
+    verticalSeparator.BorderSizePixel = 0
+    verticalSeparator.ZIndex = 10001
+    verticalSeparator.Parent = content
+    
+    local fpsLabel = Instance.new("TextLabel")
+    fpsLabel.Name = "FPSLabel"
+    fpsLabel.Size = UDim2.new(0.5, -6, 0, 25)
+    fpsLabel.Position = UDim2.new(0.5, 6, 0, 0)
+    fpsLabel.BackgroundTransparency = 1
+    fpsLabel.Text = "FPS: 60"
+    fpsLabel.TextColor3 = Color3.fromRGB(100, 255, 200)
+    fpsLabel.TextSize = 13
+    fpsLabel.Font = Enum.Font.GothamBold
+    fpsLabel.TextXAlignment = Enum.TextXAlignment.Center
+    fpsLabel.ZIndex = 10002
+    fpsLabel.Parent = content
+    
+    -- Horizontal separator
+    local horizontalSeparator = Instance.new("Frame")
+    horizontalSeparator.Name = "HorizontalSeparator"
+    horizontalSeparator.Size = UDim2.new(1, 0, 0, 1)
+    horizontalSeparator.Position = UDim2.new(0, 0, 0, 30)
+    horizontalSeparator.BackgroundColor3 = Color3.fromRGB(50, 150, 255)
+    horizontalSeparator.BackgroundTransparency = 0.5
+    horizontalSeparator.BorderSizePixel = 0
+    horizontalSeparator.ZIndex = 10001
+    horizontalSeparator.Parent = content
+    
+    -- Row 2: Notifications
+    local notifLabel = Instance.new("TextLabel")
+    notifLabel.Name = "NotifLabel"
+    notifLabel.Size = UDim2.new(1, 0, 0, 25)
+    notifLabel.Position = UDim2.new(0, 0, 0, 35)
+    notifLabel.BackgroundTransparency = 1
+    notifLabel.Text = "Notifications: 0"
+    notifLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
+    notifLabel.TextSize = 13
+    notifLabel.Font = Enum.Font.GothamBold
+    notifLabel.TextXAlignment = Enum.TextXAlignment.Center
+    notifLabel.ZIndex = 10002
+    notifLabel.Parent = content
+    
+    -- Make draggable
+    local dragging = false
+    local dragInput, dragStart, startPos
+    local UserInputService = game:GetService("UserInputService")
+    
+    container.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = container.Position
+            
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+    
+    container.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            container.Position = UDim2.new(
+                startPos.X.Scale,
+                startPos.X.Offset + delta.X,
+                startPos.Y.Scale,
+                startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+    
+    screenGui.Parent = parentGui
+    
+    task.spawn(function()
+        while screenGui and screenGui.Parent do
+            task.wait(1)
+            if screenGui and screenGui.Parent then
+                screenGui.DisplayOrder = 2147483647
+            end
+        end
+    end)
+    
+    return {
+        ScreenGui = screenGui,
+        Container = container,
+        PingLabel = pingLabel,
+        FPSLabel = fpsLabel,
+        NotifLabel = notifLabel,
+        LogoIcon = logoIcon,
+        ParentType = useCoreGui and "CoreGui" or "PlayerGui"
+    }
+end
+
+-- Get real ping from Roblox Stats (sama seperti Shift+F3)
+function getRealPing()
+    local success, ping = pcall(function()
+        -- Ambil dari Stats.Network.ServerStatsItem["Data Ping"]
+        local networkStats = Stats:FindFirstChild("Network")
+        if networkStats then
+            local serverStats = networkStats:FindFirstChild("ServerStatsItem")
+            if serverStats then
+                local dataPing = serverStats:FindFirstChild("Data Ping")
+                if dataPing then
+                    local pingValue = dataPing:GetValue()
+                    return math.floor(pingValue)
+                end
+            end
+        end
+        -- Fallback ke GetNetworkPing
+        return math.floor(player:GetNetworkPing() * 1000)
+    end)
+    return success and ping or 0
+end
+
+-- Get FPS
+function getFPS()
+    local currentTime = tick()
+    local deltaTime = currentTime - lastFrameTime
+    lastFrameTime = currentTime
+    
+    local currentFPS = 0
+    if deltaTime > 0 then
+        currentFPS = 1 / deltaTime
+    end
+    
+    table.insert(fpsHistory, currentFPS)
+    
+    if #fpsHistory > maxFPSHistory then
+        table.remove(fpsHistory, 1)
+    end
+    
+    local sum = 0
+    for _, fps in ipairs(fpsHistory) do
+        sum = sum + fps
+    end
+    
+    local averageFPS = sum / #fpsHistory
+    return math.floor(math.clamp(averageFPS, 0, 240))
+end
+
+-- Get total notifications (count semua object bernama "Tile")
+function getTotalNotifications()
+    local success, count = pcall(function()
+        local textNotifications = playerGui:FindFirstChild("Text Notifications")
+        if textNotifications then
+            local frame = textNotifications:FindFirstChild("Frame")
+            if frame then
+                -- Count semua object yang bernama "Tile"
+                local notifCount = 0
+                for _, child in ipairs(frame:GetChildren()) do
+                    if child.Name == "Tile" then
+                        notifCount = notifCount + 1
+                    end
+                end
+                return notifCount
+            end
+        end
+        return 0
+    end)
+    return success and count or 0
+end
+
+-- Update colors
+ function updatePingColor(pingLabel, value)
+    local ping = tonumber(value)
+    if ping <= 50 then
+        pingLabel.TextColor3 = Color3.fromRGB(100, 255, 200)
+    elseif ping <= 100 then
+        pingLabel.TextColor3 = Color3.fromRGB(150, 200, 255)
+    elseif ping <= 150 then
+        pingLabel.TextColor3 = Color3.fromRGB(180, 140, 255)
+    else
+        pingLabel.TextColor3 = Color3.fromRGB(255, 100, 150)
+    end
+end
+
+ function updateFPSColor(fpsLabel, value)
+    local fps = tonumber(value)
+    if fps >= 55 then
+        fpsLabel.TextColor3 = Color3.fromRGB(100, 255, 200)
+    elseif fps >= 40 then
+        fpsLabel.TextColor3 = Color3.fromRGB(150, 200, 255)
+    elseif fps >= 25 then
+        fpsLabel.TextColor3 = Color3.fromRGB(180, 140, 255)
+    else
+        fpsLabel.TextColor3 = Color3.fromRGB(255, 100, 150)
+    end
+end
+
+ function updateNotifColor(notifLabel, value)
+    local count = tonumber(value)
+    if count == 0 then
+        notifLabel.TextColor3 = Color3.fromRGB(150, 200, 255)
+    elseif count <= 5 then
+        notifLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
+    elseif count <= 10 then
+        notifLabel.TextColor3 = Color3.fromRGB(255, 150, 100)
+    else
+        notifLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+    end
+end
+
+-- Show panel
+function MonitorModule:Show()
+    if self.GUI then
+        self.GUI.ScreenGui.Enabled = true
+        return
+    end
+    
+    self.GUI = createMonitorGUI()
+    print("[VoraHub Monitor] Started in:", self.GUI.ParentType)
+    
+    -- Update FPS
+    updateConnection = RunService.RenderStepped:Connect(function()
+        if not self.GUI or not self.GUI.ScreenGui or not self.GUI.ScreenGui.Parent then
+            if updateConnection then
+                updateConnection:Disconnect()
+            end
+            return
+        end
+        if not self.GUI.FPSLabel then
+            return
+        end
+        
+        local fps = getFPS()
+        self.GUI.FPSLabel.Text = "FPS: " .. tostring(fps)
+        updateFPSColor(self.GUI.FPSLabel, fps)
+    end)
+    
+    -- Update ping (real ping dari Stats)
+    local lastPingUpdate = 0
+    pingUpdateConnection = RunService.Heartbeat:Connect(function()
+        if not self.GUI or not self.GUI.ScreenGui or not self.GUI.ScreenGui.Parent then
+            if pingUpdateConnection then
+                pingUpdateConnection:Disconnect()
+            end
+            return
+        end
+        if not self.GUI.PingLabel then
+            return
+        end
+        
+        local currentTime = tick()
+        if currentTime - lastPingUpdate >= 0.5 then
+            local ping = getRealPing()
+            self.GUI.PingLabel.Text = "Ping: " .. ping .. " ms"
+            updatePingColor(self.GUI.PingLabel, ping)
+            lastPingUpdate = currentTime
+        end
+    end)
+    
+    -- Update notifications count
+    local lastNotifUpdate = 0
+    notificationConnection = RunService.Heartbeat:Connect(function()
+        if not self.GUI or not self.GUI.ScreenGui or not self.GUI.ScreenGui.Parent then
+            if notificationConnection then
+                notificationConnection:Disconnect()
+            end
+            return
+        end
+        if not self.GUI.NotifLabel then
+            return
+        end
+        
+        local currentTime = tick()
+        if currentTime - lastNotifUpdate >= 1 then  -- Update every 1 second
+            local notifCount = getTotalNotifications()
+            self.GUI.NotifLabel.Text = "Notifications: " .. notifCount
+            updateNotifColor(self.GUI.NotifLabel, notifCount)
+            lastNotifUpdate = currentTime
+        end
+    end)
+end
+
+-- Hide, Toggle, Destroy methods
+function MonitorModule:Hide()
+    if self.GUI and self.GUI.ScreenGui then
+        self.GUI.ScreenGui.Enabled = false
+    end
+end
+
+function MonitorModule:Toggle()
+    if self.GUI and self.GUI.ScreenGui then
+        self.GUI.ScreenGui.Enabled = not self.GUI.ScreenGui.Enabled
+    else
+        self:Show()
+    end
+end
+
+function MonitorModule:Destroy()
+    if updateConnection then
+        updateConnection:Disconnect()
+        updateConnection = nil
+    end
+    
+    if pingUpdateConnection then
+        pingUpdateConnection:Disconnect()
+        pingUpdateConnection = nil
+    end
+    
+    if notificationConnection then
+        notificationConnection:Disconnect()
+        notificationConnection = nil
+    end
+    
+    if self.GUI and self.GUI.ScreenGui then
+        self.GUI.ScreenGui:Destroy()
+        self.GUI = nil
+    end
+    
+    fpsHistory = {}
+end
+
+-- Auto-start monitor
+MonitorModule:Show()
