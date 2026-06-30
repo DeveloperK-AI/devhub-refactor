@@ -1,29 +1,25 @@
--- ============================================================
--- REMOTE MAP & SERVICES (OPTIMIZED)
--- ============================================================
 
--- Services (tetap global untuk kompatibilitas dengan kode di bawah)
-ReplicatedStorage = game:GetService("ReplicatedStorage")
+    ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local netFolder = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
+    local netChildren = netFolder:GetChildren()
 
-local netFolder = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
-local netChildren = netFolder:GetChildren()
-
--- Optimasi isHex: gunakan string.sub karena prefix selalu 3 karakter ("RF/" atau "RE/")
-local function isHex(name: string): boolean
-    local stripped = name:sub(4)  -- lebih cepat dari gsub
-    return #stripped > 16 and stripped:match("^%x+$") ~= nil
-end
-
--- Build remoteMap: hanya iterate sampai elemen kedua terakhir
-local remoteMap = {}
-for i = 1, #netChildren - 1 do
-    local child = netChildren[i]
-    local nextChild = netChildren[i + 1]
-    if not isHex(child.Name) and isHex(nextChild.Name) then
-        local key = child.Name:sub(4)  -- hapus "RF/" atau "RE/"
-        remoteMap[key] = nextChild
+    -- Deteksi nama hex hash (bukan nama plain)
+    function isHex(name)
+        local stripped = name:gsub("^R[FE]/", "")
+        return #stripped > 16 and stripped:match("^%x+$") ~= nil
     end
-end
+
+    -- Build map: "ChargeFishingRod" -> actual hashed Instance
+    local remoteMap = {}
+    for i, child in ipairs(netChildren) do
+        if not isHex(child.Name) then
+            local next = netChildren[i + 1]
+            if next and isHex(next.Name) then
+                local key = child.Name:gsub("^R[FE]/", "")
+                remoteMap[key] = next
+            end
+        end
+    end
 
 function RF(name) return remoteMap[name] end
 function RE(name) return remoteMap[name] end
@@ -35,70 +31,49 @@ _G.SavedData = _G.SavedData or {
     FishNotif = {}
 }
 
--- ============================================================
--- FIRE LOCAL EVENT (OPTIMIZED - SINGLE THREAD PER CALL)
--- ============================================================
 function FireLocalEvent(remote, ...)
     if not remote or not remote.OnClientEvent then return end
-
-    local args = { ... }
+    local args = {...}
     local signal = remote.OnClientEvent
-
-    -- Hanya buat 1 thread per panggilan, bukan 1 thread per connection!
-    task.spawn(function()
-        for _, connection in pairs(getconnections(signal)) do
-            if connection.Function then
-                pcall(connection.Function, unpack(args))
-            end
+    for _, connection in pairs(getconnections(signal)) do
+        if connection.Function then
+            task.spawn(function()
+                pcall(function()
+                    connection.Function(unpack(args))
+                end)
+            end)
         end
-    end)
+    end
 end
 
--- ============================================================
--- SAVE COUNT (DIGUNAKAN OLEH HOOKREMOTE)
--- ============================================================
-local saveCount = 0  -- ubah ke local agar tidak mencemari global, tapi masih bisa diakses oleh HookRemote (closure)
--- Catatan: jika ada kode lain yang mengakses saveCount secara global, ubah kembali ke non-local.
--- Saya asumsikan hanya HookRemote yang menggunakannya.
+local saveCount = 0
 
--- ============================================================
--- GET SERVER REMOTE (OPTIMIZED)
--- ============================================================
-function GetServerRemote(humanName: string)
-    -- humanName selalu diawali "RF/" atau "RE/" (3 karakter)
-    return remoteMap[humanName:sub(4)]
+function GetServerRemote(humanName)
+    local key = humanName:gsub("^R[FE]/", "")
+    return remoteMap[key]
 end
 
--- ============================================================
--- HOOK REMOTE (CACHE PLAYERS SERVICE)
--- ============================================================
-local PlayersService = game:GetService("Players")  -- cache di luar fungsi
-
-function HookRemote(humanName: string, storageKey: string): boolean
+function HookRemote(humanName, storageKey)
     local remote = GetServerRemote(humanName)
-    if not remote then return false end
-
-    remote.OnClientEvent:Connect(function(...)
-        if saveCount < 7 then
-            local args = { ... }
-            _G.SavedData[storageKey] = args
-
-            if storageKey == "CaughtVisual" then
-                local lp = PlayersService.LocalPlayer
-                local myName = lp and lp.Name
-                if myName and tostring(args[1]) == tostring(myName) then
-                    saveCount = saveCount + 1
+    if remote then
+        remote.OnClientEvent:Connect(function(...)
+            if saveCount < 7 then
+                _G.SavedData[storageKey] = {...}
+                local args = {...}
+                if storageKey == "CaughtVisual" then
+                    local lp = game:GetService("Players").LocalPlayer
+                    local myName = lp and lp.Name
+                    if myName and tostring(args[1]) == tostring(myName) then
+                        saveCount = saveCount + 1
+                    end
                 end
             end
-        end
-    end)
-
-    return true
+        end)
+        return true
+    end
+    return false
 end
 
--- ============================================================
--- REMOTE VARIABLES (RF / RE)
--- ============================================================
 BuyRod              = RF("PurchaseFishingRod")
 BuyBait             = RF("PurchaseBait")
 BuyCharm            = RF("PurchaseCharm")
@@ -144,14 +119,12 @@ BaitDestroyed       = RE("BaitDestroyed")
 PirateChest         = RE("ClaimPirateChest")
 GainMaze            = RE("GainAccessToMaze")
 PlaceLever          = RE("PlaceLeverItem")
-REDialogueEnded     = RE("DialogueEnded")
+REDialogueEnded      = RE("DialogueEnded")
 RFCreateTranscendedStone = RF("CreateTranscendedStone")
 EquipBait           = RE("EquipBait")
 
--- ============================================================
--- CONFIGURATION (moons.lua style)
--- ============================================================
-_G.Config = _G.Config or {  -- gunakan _G agar eksplisit, tapi tetap global
+-- moons.lua: Config / Events / Tasks / needCast / skip / blatantFishCycleCount (FAST 3 KEDIP & UB)
+Config = {
     HookNotif = false,
     InstantFishingV2Active = false,
     isMinig = false,
@@ -166,68 +139,49 @@ _G.Config = _G.Config or {  -- gunakan _G agar eksplisit, tapi tetap global
         Stats = { castCount = 0, startTime = 0 },
     },
 }
+Tasks = {}
+blatantFishCycleCount = 0
+needCast = false
+skip = false
+Events = {}
 
--- Karena kode lain mengakses 'Config' (tanpa _G), kita buat alias
--- agar jika ada yang memanggil 'Config' langsung, tetap mengarah ke _G.Config
-Config = _G.Config
-
--- Variabel global lainnya
-Tasks = Tasks or {}
-blatantFishCycleCount = blatantFishCycleCount or 0
-needCast = needCast or false
-skip = skip or false
-Events = Events or {}
-
--- ============================================================
--- SAFE FIRE (Optimized dengan validasi)
--- ============================================================
 function safeFire(func)
-    if type(func) ~= "function" then
-        warn("[safeFire] Invalid function argument")
-        return
-    end
     task.spawn(function()
         pcall(func)
     end)
 end
 
--- ============================================================
--- CALL REMOTE SERVER (Simplified & Optimized)
--- ============================================================
+-- sleitnick_net often exposes RF/* as RemoteEvent; use FireServer in that case.
 function CallRemoteServer(remote, ...)
     if not remote then return false end
-
-    local args = { ... }
-
-    -- Deteksi tipe remote dan panggil method yang sesuai
+    local ok
     if remote:IsA("RemoteFunction") then
-        local ok, result = pcall(remote.InvokeServer, remote, unpack(args))
-        return ok, result
+        ok = select(1, pcall(function(...)
+            remote:InvokeServer(...)
+        end, ...))
     elseif remote:IsA("RemoteEvent") then
-        local ok = pcall(remote.FireServer, remote, unpack(args))
-        return ok
+        ok = select(1, pcall(function(...)
+            remote:FireServer(...)
+        end, ...))
     else
-        -- Fallback: coba InvokeServer, lalu FireServer jika gagal
-        local ok, result = pcall(remote.InvokeServer, remote, unpack(args))
-        if ok then
-            return true, result
+        ok = select(1, pcall(function(...)
+            remote:InvokeServer(...)
+        end, ...))
+        if not ok then
+            ok = select(1, pcall(function(...)
+                remote:FireServer(...)
+            end, ...))
         end
-        -- Jika InvokeServer gagal, coba FireServer
-        ok = pcall(remote.FireServer, remote, unpack(args))
-        return ok
     end
+    return ok
 end
 
--- ============================================================
--- EVENTS & SERVICES
--- ============================================================
 Events.equip = GetServerRemote("RF/EquipToolFromHotbar")
 Events.CancelFishingInputs = GetServerRemote("RF/CancelFishingInputs")
 Events.charge = GetServerRemote("RF/ChargeFishingRod")
 Events.minigame = GetServerRemote("RF/RequestFishingMinigameStarted")
 Events.UpdateAutoFishingState = GetServerRemote("RF/UpdateAutoFishingState")
 
--- Services (tetap global untuk kompatibilitas)
 TweenService = game:GetService("TweenService")
 UserInputService = game:GetService("UserInputService")
 RunService = game:GetService("RunService")
@@ -237,16 +191,16 @@ HttpService = game:GetService("HttpService")
 Lighting = game:GetService("Lighting")
 Terrain = workspace:FindFirstChildOfClass("Terrain")
 
--- ============================================================
--- DATA CACHE SYSTEM
--- ============================================================
+
+
+-- Performance Optimization: Data Cache System
 DataCache = {
     equipped = nil,
     rods = nil,
     inventory = nil,
     enchantStones = nil,
     lastUpdate = 0,
-    cacheDuration = 3,
+    cacheDuration = 3
 }
 
 function DataCache:Get(key)
@@ -271,7 +225,7 @@ end
 local VoraLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/DeveloperK-AI/devhub-refactor/main/libnew.lua"))()
 
  Window = VoraLib:CreateWindow({
-	Name = "DeveloperK Hub",
+	Name = "Vora Hub",
 	Intro = true
 })
 
@@ -491,41 +445,32 @@ host.CharacterAdded:Connect(function()
     applyZoom()
 end)
 
--- ============================================================
--- REPLICATION & DATA
--- ============================================================
 ReplicatedStorage = game:GetService("ReplicatedStorage")
 RunService = game:GetService("RunService")
-
 -- Net already initialized
 Replion = require(ReplicatedStorage.Packages.Replion)
 FishingController = require(ReplicatedStorage.Controllers.FishingController)
 ItemUtility = require(ReplicatedStorage.Shared.ItemUtility)
 VendorUtility = require(ReplicatedStorage.Shared.VendorUtility)
+ Data = Replion.Client:WaitReplion("Data")
+ Client = require(ReplicatedStorage.Packages.Replion).Client
+ dataStore = Client:WaitReplion("Data")
+ Items = ReplicatedStorage:WaitForChild("Items")
+ Players = game:GetService("Players")
+ LocalPlayer = Players.LocalPlayer
+ NetService = Net
+ sellAllItems = SellItem
+ enchan = REAltar
+ oxygenRemote = UpdateOxygen
+ radar = UpdateRadar
+ autoon = AutoEnabled
+ equipTool = REEquip
+ CoreGui = game:GetService("CoreGui")
+ tradeFunc = InitiateTrade
+ RETextNotification = RENotify
+ ItemUtility = require(ReplicatedStorage.Shared.ItemUtility)
 
-Data = Replion.Client:WaitReplion("Data")
-Client = require(ReplicatedStorage.Packages.Replion).Client
-dataStore = Client:WaitReplion("Data")
-Items = ReplicatedStorage:WaitForChild("Items")
-Players = game:GetService("Players")
-LocalPlayer = Players.LocalPlayer
-NetService = Net
 
--- Alias untuk remote
-sellAllItems = SellItem
-enchan = REAltar
-oxygenRemote = UpdateOxygen
-radar = UpdateRadar
-autoon = AutoEnabled
-equipTool = REEquip
-CoreGui = game:GetService("CoreGui")
-tradeFunc = InitiateTrade
-RETextNotification = RENotify
-ItemUtility = require(ReplicatedStorage.Shared.ItemUtility)
-
--- ============================================================
--- RE TABLE (Remote Events Wrapper)
--- ============================================================
 RE = {
     FavoriteItem = REFav,
     FavoriteStateChanged = REFavChg,
@@ -534,18 +479,13 @@ RE = {
     EquipItem = REEquipItem,
     ActivateAltar = REAltar,
     EquipTool = REEquip,
-    OpenPirateChest = PirateChest,
+    OpenPirateChest = PirateChest
 }
 
-
--- Remote aliases untuk enchant
 equipItemRemote = RE.EquipItem or REEquipItem
 equipToolRemote = RE.EquipTool or REEquip
 activateAltarRemote = RE.ActivateAltar or REAltar
 
--- ============================================================
--- STATE & PATCHING FISHING CONTROLLER
--- ============================================================
 st = {
     canFish = true,
 }
@@ -573,131 +513,26 @@ end
 
 patchFishingController()
 
---!strict
--- ============================================================
--- ULTRABLATANT STUB (Obfuscated)
--- ============================================================
+-- Ultra Blatant 3N (moons.lua): simpan fungsi asli FishingController, stub di PC + mobile
+local origUB3N_RequestChargeFishingRod, origUB3N_SendFishingRequestToServer
+pcall(function()
+    origUB3N_RequestChargeFishingRod = FishingController.RequestChargeFishingRod
+    origUB3N_SendFishingRequestToServer = FishingController.SendFishingRequestToServer
+end)
 
--- [[ Obfuscation Layer ]] --
-local _0x1 = string.char
-local _0x2 = string.byte
-local _0x3 = table.insert
-local _0x4 = pcall
-local _0x5 = warn
-local _0x6 = print
-local _0x7 = type
-local _0x8 = next
-local _0x9 = setmetatable
-local _0xA = getmetatable
-local _0xB = pairs
-local _0xC = ipairs
-
--- XOR Decryptor
-local function _0xD(_0xE, _0xF)
-    local _0x10 = ""
-    for _0x11 = 1, #_0xE do
-        _0x10 = _0x10 .. _0x1(_0x2(_0xE, _0x11) ~ _0xF)
+function applyUltraBlatant3NFishingControllerStub(enabled)
+    if not origUB3N_RequestChargeFishingRod or not origUB3N_SendFishingRequestToServer then
+        return
     end
-    return _0x10
+    if enabled then
+        FishingController.RequestChargeFishingRod = function(self, ...) end
+        FishingController.SendFishingRequestToServer = function(self, ...) end
+    else
+        FishingController.RequestChargeFishingRod = origUB3N_RequestChargeFishingRod
+        FishingController.SendFishingRequestToServer = origUB3N_SendFishingRequestToServer
+    end
 end
 
--- Encrypted strings (XOR key = 0x4A)
-local _0x12 = {
-    _0xD("\x1A\x3C\x3F\x3A\x3D\x3E\x3A\x3C\x3B\x3E\x3A\x2B", 0x4A), -- "RequestChargeFishingRod"
-    _0xD("\x1A\x3C\x3F\x3A\x3D\x3E\x3A\x3C\x3B\x3E\x3A\x2B\x3E\x3A\x3F\x3E\x3A", 0x4A), -- "SendFishingRequestToServer"
-}
-local _0x13 = { _0x12[1], _0x12[2] }
-
--- Encrypted warning messages
-local _0x14 = _0xD("\x1A\x3C\x3F\x3A\x3D\x3E\x3A\x3C\x3B\x3E\x3A\x2B\x3E\x3A\x3F\x3E\x3A", 0x4A) -- "FishingController"
-local _0x15 = _0xD("\x1A\x3C\x3F\x3A\x3D\x3E\x3A\x3C\x3B\x3E\x3A\x2B\x3E\x3A\x3F\x3E\x3A", 0x4A)
-
--- ============================================================
--- MAIN MODULE
--- ============================================================
-local _0x16 = {}
-
-local function _0x17(_0x18)
-    local _0x19 = { _fishingController = _0x18, _backup = {}, _isActive = false }
-    local _0x1A = _0x9(_0x19, { __index = _0x16 })
-    
-    -- Auto-backup
-    local _0x1B = function()
-        if not _0x1A._fishingController then
-            _0x5("[UltraBlatant] " .. _0x14 .. " nil, backup skipped.")
-            return false
-        end
-        local _0x1C = true
-        for _, _0x1D in _0xC(_0x13) do
-            local _0x1E, _0x1F = _0x4(function()
-                return _0x1A._fishingController[_0x1D]
-            end)
-            if _0x1E and _0x7(_0x1F) == "function" then
-                _0x1A._backup[_0x1D] = _0x1F
-            else
-                _0x5("[UltraBlatant] Failed to backup " .. _0x1D)
-                _0x1C = false
-            end
-        end
-        if _0x1C then
-            _0x6("[UltraBlatant] All functions backed up.")
-        else
-            _0x5("[UltraBlatant] Some functions failed to backup.")
-        end
-        return _0x1C
-    end
-    _0x1B()
-    
-    return _0x1A
-end
-
--- ============================================================
--- METHOD: APPLY STUB
--- ============================================================
-function _0x16:apply(_0x20)
-    if not self._fishingController then
-        _0x5("[UltraBlatant] FishingController nil, cannot apply stub.")
-        return false
-    end
-    if not _0x8(self._backup) then
-        _0x5("[UltraBlatant] No backup available, cannot apply stub.")
-        return false
-    end
-    
-    self._isActive = _0x20
-    local _0x21 = true
-    for _, _0x1D in _0xC(_0x13) do
-        if _0x20 then
-            self._fishingController[_0x1D] = function() end
-        else
-            local _0x22 = self._backup[_0x1D]
-            if _0x22 then
-                self._fishingController[_0x1D] = _0x22
-            else
-                _0x5("[UltraBlatant] Cannot restore " .. _0x1D)
-                _0x21 = false
-            end
-        end
-    end
-    if _0x21 then
-        _0x6("[UltraBlatant] Stub " .. (_0x20 and "enabled" or "disabled"))
-    end
-    return _0x21
-end
-
--- ============================================================
--- GLOBAL WRAPPER (Tetap kompatibel)
--- ============================================================
-local _0x23 = nil
-local function _0x24(_0x25)
-    if not _0x23 then
-        _0x23 = _0x17(FishingController)
-    end
-    return _0x23:apply(_0x25)
-end
-
--- Override global
-applyUltraBlatant3NFishingControllerStub = _0x24
 ------------------ Variable ------------------------
 _G.AutoFarm = false
 _G.AutoRod = false
