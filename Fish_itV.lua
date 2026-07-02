@@ -1,106 +1,161 @@
- -- ============================================================
--- REMOTE MAP & SERVICES (OPTIMIZED)
+--!strict
+
+--[[
+    RemoteManager - Modul Pemetaan & Event Lokal untuk Sleitnick Net
+    Menggantikan pendekatan lama (RF/RE global, FireLocalEvent exploit-only, _G.SavedData)
+    dengan sistem yang aman, strict-compliant, dan portabel.
+]]
+
+local RemoteManager = {}
+
 -- ============================================================
+-- SERVICES & PATH RESOLUTION
+-- ============================================================
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
--- Services (tetap global untuk kompatibilitas dengan kode di bawah)
-ReplicatedStorage = game:GetService("ReplicatedStorage")
+local packages = ReplicatedStorage:FindFirstChild("Packages")
+local index = packages and packages:FindFirstChild("_Index")
+local netFolder = index and index:FindFirstChild("net", true)  -- rekursif aman
 
-local netFolder = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
-local netChildren = netFolder:GetChildren()
+-- ============================================================
+-- PEMETAAN REMOTE (CLASS MATCHING)
+-- ============================================================
+local remoteMap: { [string]: Instance } = {}
 
--- Optimasi isHex: gunakan string.sub karena prefix selalu 3 karakter ("RF/" atau "RE/")
-local function isHex(name: string): boolean
-    local stripped = name:sub(4)  -- lebih cepat dari gsub
-    return #stripped > 16 and stripped:match("^%x+$") ~= nil
-end
+if netFolder then
+    local remotes = netFolder:GetChildren()
+    local namedRemotes = {}  -- [cleanName] = { prefix = "RF"/"RE", object = obj }
+    local hexRemotes = {}    -- [hexName] = obj
 
--- Build remoteMap: hanya iterate sampai elemen kedua terakhir
-local remoteMap = {}
-for i = 1, #netChildren - 1 do
-    local child = netChildren[i]
-    local nextChild = netChildren[i + 1]
-    if not isHex(child.Name) and isHex(nextChild.Name) then
-        local key = child.Name:sub(4)  -- hapus "RF/" atau "RE/"
-        remoteMap[key] = nextChild
+    for _, obj in ipairs(remotes) do
+        if obj:IsA("RemoteFunction") or obj:IsA("RemoteEvent") then
+            local name = obj.Name
+            local isHex = #name > 32 and name:match("^%x+$") ~= nil
+
+            if isHex then
+                hexRemotes[name] = obj
+            else
+                local prefix, clean = name:match("^(R[FE])/(.+)$")
+                if prefix and clean then
+                    namedRemotes[clean] = { prefix = prefix, object = obj }
+                end
+            end
+        end
     end
+
+    -- Pasangkan dengan menghapus hex yang sudah digunakan
+    local hexPool = {}
+    for hexName, obj in pairs(hexRemotes) do
+        hexPool[hexName] = obj
+    end
+
+    for cleanName, data in pairs(namedRemotes) do
+        local targetClass = data.object.ClassName
+        for hexName, hexObj in pairs(hexPool) do
+            if hexObj.ClassName == targetClass then
+                remoteMap[cleanName] = hexObj
+                hexPool[hexName] = nil
+                break
+            end
+        end
+        if not remoteMap[cleanName] then
+            warn(string.format("[RemoteManager] Remote '%s' tidak mendapat pasangan hex", cleanName))
+        end
+    end
+else
+    warn("[RemoteManager] Folder 'net' tidak ditemukan. Remote mapping gagal.")
 end
 
 -- ============================================================
--- REMOTE ACCESS FUNCTIONS
+-- AKSES REMOTE (PENGGANTI RF/RE & GetServerRemote)
 -- ============================================================
-function RF(name) return remoteMap[name] end
-function RE(name) return remoteMap[name] end
+--[=[
+    Mengambil remote berdasarkan nama bersih (tanpa prefix RF/RE).
+    @param name string -- Nama remote seperti "ChargeFishingRod"
+    @return Instance? -- Objek remote atau nil
+]=]
+function RemoteManager.GetRemote(name: string): Instance?
+    return remoteMap[name]
+end
+
+--[=[
+    Alternatif: mengambil remote dengan string human-readable seperti "RF/ChargeFishingRod".
+    Hanya untuk kompatibilitas dengan kode yang menggunakan format lama.
+    @param humanName string -- Nama dengan prefix, contoh "RF/ChargeFishingRod"
+    @return Instance?
+]=]
+function RemoteManager.GetServerRemote(humanName: string): Instance?
+    -- Ambil setelah 3 karakter pertama (prefix "RF/" atau "RE/")
+    local clean = humanName:sub(4)
+    return remoteMap[clean]
+end
 
 -- ============================================================
--- AMBLATANT CACHED DATA
+-- DATA TERENKAPSULASI (PENGGANTI _G.SavedData)
 -- ============================================================
-_G.SavedData = _G.SavedData or {
+local SavedData = {
     FishCaught = {},
     CaughtVisual = {},
     FishNotif = {},
 }
+RemoteManager.SavedData = SavedData
 
 -- ============================================================
--- FIRE LOCAL EVENT (OPTIMIZED - SINGLE THREAD PER CALL)
+-- FIRE LOCAL EVENT (RESMI, PAKAI BindableEvent)
 -- ============================================================
-function FireLocalEvent(remote, ...)
-    if not remote or not remote.OnClientEvent then return end
+local localEvent = Instance.new("BindableEvent")
+localEvent.Name = "RemoteManagerLocalEvent"
+localEvent.Parent = script  -- atau letakkan di tempat aman
 
-    local args = { ... }
-    local signal = remote.OnClientEvent
+--[=[
+    Memicu event lokal untuk semua listener.
+    @param ... any -- Data yang akan dikirim ke listener
+]=]
+function RemoteManager.FireLocalEvent(...: any)
+    localEvent:Fire(...)
+end
 
-    -- Hanya buat 1 thread per panggilan, bukan 1 thread per connection!
-    task.spawn(function()
-        for _, connection in pairs(getconnections(signal)) do
-            if connection.Function then
-                pcall(connection.Function, unpack(args))
-            end
-        end
-    end)
+--[=[
+    Mendaftarkan callback untuk event lokal.
+    @param callback (...any) -> ()
+    @return Connection -- Dapat diputus dengan :Disconnect()
+]=]
+function RemoteManager.OnLocalEvent(callback: (...any) -> ())
+    return localEvent.Event:Connect(callback)
 end
 
 -- ============================================================
--- SAVE COUNT (DIGUNAKAN OLEH HOOKREMOTE)
+-- HOOK REMOTE (PENYEMPURNAAN)
 -- ============================================================
-local saveCount = 0  -- ubah ke local agar tidak mencemari global, tapi masih bisa diakses oleh HookRemote (closure)
--- Catatan: jika ada kode lain yang mengakses saveCount secara global, ubah kembali ke non-local.
--- Saya asumsikan hanya HookRemote yang menggunakannya.
+local PlayersService = game:GetService("Players")
 
--- ============================================================
--- GET SERVER REMOTE (OPTIMIZED)
--- ============================================================
-function GetServerRemote(humanName: string)
-    -- humanName selalu diawali "RF/" atau "RE/" (3 karakter)
-    return remoteMap[humanName:sub(4)]
-end
+--[=[
+    Mendengarkan event OnClientEvent dari remote tertentu dan menyimpan data
+    ke SavedData lokal. Juga meneruskan event ke listener FireLocalEvent.
+    Tidak ada batasan saveCount yang membingungkan.
+    @param humanName string -- Nama remote dengan prefix (contoh: "RE/CaughtVisual")
+    @param storageKey string -- Kunci di tabel SavedData untuk menyimpan argumen
+    @return Connection? -- Koneksi yang bisa diputus, atau nil jika gagal
+]=]
+function RemoteManager.HookRemote(humanName: string, storageKey: string): Connection?
+    local remote = RemoteManager.GetServerRemote(humanName)
+    if not remote or not remote:IsA("RemoteEvent") then
+        warn(string.format("[RemoteManager] Gagal hook: %s tidak ditemukan atau bukan RemoteEvent", humanName))
+        return nil
+    end
 
--- ============================================================
--- HOOK REMOTE (CACHE PLAYERS SERVICE)
--- ============================================================
-local PlayersService = game:GetService("Players")  -- cache di luar fungsi
+    local connection = remote.OnClientEvent:Connect(function(...)
+        local args = { ... }
+        SavedData[storageKey] = args
 
-function HookRemote(humanName: string, storageKey: string): boolean
-    local remote = GetServerRemote(humanName)
-    if not remote then return false end
-
-    remote.OnClientEvent:Connect(function(...)
-        if saveCount < 7 then
-            local args = { ... }
-            _G.SavedData[storageKey] = args
-
-            if storageKey == "CaughtVisual" then
-                local lp = PlayersService.LocalPlayer
-                local myName = lp and lp.Name
-                if myName and tostring(args[1]) == tostring(myName) then
-                    saveCount = saveCount + 1
-                end
-            end
-        end
+        -- Trigger lokal event untuk notifikasi ke UI / modul lain
+        RemoteManager.FireLocalEvent("RemoteDataUpdated", storageKey, args)
     end)
 
-    return true
+    return connection
 end
 
+return RemoteManager
 
 BuyRod              = RF("PurchaseFishingRod")
 BuyBait             = RF("PurchaseBait")
