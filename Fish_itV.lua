@@ -6222,7 +6222,7 @@ AutoTab:CreateToggle({
 })
 
 
-AutoTab:CreateSection({ Name = "Enchant Features", Icon = "rbxassetid://7733801202" })
+
 
 --!strict
 
