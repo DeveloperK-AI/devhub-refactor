@@ -1,431 +1,179 @@
---!strict
+ ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local netFolder = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
+    local netChildren = netFolder:GetChildren()
 
---[[
-    UNIVERSAL INSTANT FISHING FRAMEWORK v3.1.0
-    Modul otomasi memancing Roblox yang aman, strict-compliant, berperforma tinggi,
-    dilengkapi de-obfuscator Sleitnick Net berbasis Class Matching,
-    serta komunikasi lokal yang sah menggunakan BindableEvent.
-    
-    @author AI Collaborator & Reviewer
-    @version 3.1.0
-]]
+    -- Deteksi nama hex hash (bukan nama plain)
+    function isHex(name)
+        local stripped = name:gsub("^R[FE]/", "")
+        return #stripped > 16 and stripped:match("^%x+$") ~= nil
+    end
 
-local Instant = {}
-
--- ============================================================
--- SERVIS & PATH RESOLUTION (STRICT-SAFE)
--- ============================================================
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
--- Proteksi path berantai tanpa method fiktif
-local packages = ReplicatedStorage:WaitForChild("Packages", 5)
-local index = packages and packages:WaitForChild("_Index", 5)
-local netFolder = index and index:FindFirstChild("net", true)
-
--- ============================================================
--- ARSITEKTUR PEMETAAN REMOTE (DE-OBFUSCATOR)
--- ============================================================
-local remoteMap: { [string]: Instance } = {}
-
-if netFolder then
-    local remotes = netFolder:GetChildren()
-    local namedRemotes = {}  -- [cleanName] = { type = prefix, object = obj, clean = clean }
-    local hexRemotes = {}    -- [hexName] = obj
-
-    -- Langkah 1: Klasifikasi berdasarkan karakteristik Objek & Kelas
-    for _, obj in ipairs(remotes) do
-        if obj:IsA("RemoteFunction") or obj:IsA("RemoteEvent") then
-            local name = obj.Name
-            -- Standard hash Sleitnick Net biasanya >32 karakter hex murni
-            local isHex = #name > 32 and name:match("^%x+$") ~= nil
-
-            if isHex then
-                hexRemotes[name] = obj
-            else
-                -- Tangkap prefix (RF/RE) dan nama bersih secara presisi via pola regex
-                local prefix, clean = name:match("^(R[FE])/(.+)$")
-                if prefix and clean then
-                    namedRemotes[clean] = { type = prefix, object = obj, clean = clean }
-                end
+    -- Build map: "ChargeFishingRod" -> actual hashed Instance
+    local remoteMap = {}
+    for i, child in ipairs(netChildren) do
+        if not isHex(child.Name) then
+            local next = netChildren[i + 1]
+            if next and isHex(next.Name) then
+                local key = child.Name:gsub("^R[FE]/", "")
+                remoteMap[key] = next
             end
         end
     end
 
-    -- Langkah 2: Pasangkan setiap nama bersih dengan satu remote hex unik
-    -- Salin tabel hex agar aman diiterasi sambil dihapus
-    local hexPool = {}
-    for hexName, obj in pairs(hexRemotes) do
-        hexPool[hexName] = obj
-    end
+function RF(name) return remoteMap[name] end
+function RE(name) return remoteMap[name] end
 
-    for cleanName, data in pairs(namedRemotes) do
-        local targetClass = data.object.ClassName
-
-        for hexName, hexObj in pairs(hexPool) do
-            if hexObj.ClassName == targetClass then
-                remoteMap[cleanName] = hexObj
-                hexPool[hexName] = nil   -- Hapus agar tidak dipakai ulang
-                break
-            end
-        end
-
-        if not remoteMap[cleanName] then
-            warn(string.format("[Instant] Remote '%s' tidak menemukan pasangan hex dengan kelas %s", cleanName, targetClass))
-        end
-    end
-else
-    warn("[Instant] Kritis: Folder jaringan 'net' tidak ditemukan!")
-end
-
--- Ekstrak Remote Hasil Pemetaan secara aman dengan fallback nama umum
-local RF_ChargeFishingRod = remoteMap["ChargeRod"] or remoteMap["ChargeFishingRod"]
-local RE_CatchFishCompleted = remoteMap["FishDoneRE"] or remoteMap["FishDone"] or remoteMap["CatchFishCompleted"]
-local RF_RequestFishingMinigameStarted = remoteMap["StartMini"] or remoteMap["RequestFishingMinigameStarted"]
-
--- ============================================================
--- STATE & KONFIGURASI INTERNAL
--- ============================================================
-type ModuleState = {
-    enabled: boolean,
-    running: boolean,
-    castMode: string,
-    completeDelay: number,
-    castDelay: number,
-    notifDelay: number,
-    notifDuration: number,
-}
-
-local state: ModuleState = {
-    enabled = false,
-    running = false,
-    castMode = "Fast",
-    completeDelay = 3,
-    castDelay = 0.3,
-    notifDelay = 1.6,
-    notifDuration = 4.7,
-}
-
--- SavedData terenkapsulasi dalam modul, bukan di _G
-local SavedData = {
+-- Amblatant support: cached remote data & local event re-fire
+_G.SavedData = _G.SavedData or {
     FishCaught = {},
     CaughtVisual = {},
-    FishNotif = {},
+    FishNotif = {}
 }
 
--- Config eksternal (jika ada) diambil dari _G dengan aman
-type ConfigStructure = {
-    HookNotif: boolean,
-    UB: {
-        Active: boolean,
-        Stats: { startTime: number },
-        Settings: {
-            CompleteDelay: number,
-            CancelDelay: number,
-            CastMode: string?,
-        }
-    }
-}
-local Config: ConfigStructure? = rawget(_G, "Config")
-
--- Registri Manajemen Kontrol Thread
-local loopTask: thread? = nil
-local activeNotifThreads: { [thread]: boolean } = {}
-local onStopCallback: (() -> ())? = nil
-
-local notifHooked = false
-local originalDeliver: ((any, any) -> ())? = nil
-local originalTween: ((any, any, number, any) -> any)? = nil
-local textController: any = nil
-
--- Generator random bersama
-local sharedRandom = Random.new()
-
-----------------------------------------------------------------
--- CORE MATH & TIMING LOGIC
-----------------------------------------------------------------
-
-local function getPowerAtTime(chargeTime: number, elapsed: number): number
-    -- Rumus deterministik modular non-allocating [4, 10]
-    local speed = math.floor((chargeTime % 7)) + 4 
-    local angle = (math.pi / 2) + (elapsed * speed)
-    return (1 - math.sin(angle)) / 2
-end
-
-local function waitForPower(chargeTime: number, threshold: number): (number, number)
-    local deadline = chargeTime + 2.0
-    local currentTime = workspace:GetServerTimeNow()
-    local elapsed = 0.0
-    local power = 0.0
-
-    while currentTime < deadline do
-        elapsed = currentTime - chargeTime
-        power = getPowerAtTime(chargeTime, elapsed)
-        
-        if power >= threshold then
-            return elapsed, power
-        end
-        
-        task.wait() -- Tepat 1 frame Heartbeat engine
-        currentTime = workspace:GetServerTimeNow()
-    end
-
-    -- Fallback timeout aman
-    elapsed = currentTime - chargeTime
-    return elapsed, getPowerAtTime(chargeTime, elapsed)
-end
-
-----------------------------------------------------------------
--- NETWORK EXECUTION WRAPPERS
-----------------------------------------------------------------
-
-local function safeInvoke(remote: Instance?, ...: any)
-    if not remote or not remote:IsA("RemoteFunction") then return end
-    local args = { ... }
-    task.spawn(function()
-        local ok, err = pcall(remote.InvokeServer, remote, table.unpack(args))
-        if not ok then warn(string.format("[Network Error] InvokeServer %s gagal: %s", remote.Name, tostring(err))) end
-    end)
-end
-
-local function safeFire(remote: Instance?, ...: any)
-    if not remote or not remote:IsA("RemoteEvent") then return end
-    local args = { ... }
-    task.spawn(function()
-        local ok, err = pcall(remote.FireServer, remote, table.unpack(args))
-        if not ok then warn(string.format("[Network Error] FireServer %s gagal: %s", remote.Name, tostring(err))) end
-    end)
-end
-
-----------------------------------------------------------------
--- NOTIFICATION HOOK SYSTEM
-----------------------------------------------------------------
-
-local function hookNotificationDelay()
-    if notifHooked then return end
-
-    local ok, controller = pcall(function()
-        return require(ReplicatedStorage:FindFirstChild("TextNotificationController", true) :: any)
-    end)
-
-    if not ok or not controller then return end
-    textController = controller
-
-    if controller.DeliverNotification then
-        originalDeliver = controller.DeliverNotification
-        controller.DeliverNotification = function(self, p24)
-            if state.enabled and state.notifDelay > 0 then
-                local t: thread
-                t = task.delay(state.notifDelay, function()
-                    activeNotifThreads[t] = nil
-                    if originalDeliver then originalDeliver(self, p24) end
+function FireLocalEvent(remote, ...)
+    if not remote or not remote.OnClientEvent then return end
+    local args = {...}
+    local signal = remote.OnClientEvent
+    for _, connection in pairs(getconnections(signal)) do
+        if connection.Function then
+            task.spawn(function()
+                pcall(function()
+                    connection.Function(unpack(args))
                 end)
-                activeNotifThreads[t] = true
-            else
-                if originalDeliver then originalDeliver(self, p24) end
+            end)
+        end
+    end
+end
+
+local saveCount = 0
+
+function GetServerRemote(humanName)
+    local key = humanName:gsub("^R[FE]/", "")
+    return remoteMap[key]
+end
+
+function HookRemote(humanName, storageKey)
+    local remote = GetServerRemote(humanName)
+    if remote then
+        remote.OnClientEvent:Connect(function(...)
+            if saveCount < 7 then
+                _G.SavedData[storageKey] = {...}
+                local args = {...}
+                if storageKey == "CaughtVisual" then
+                    local lp = game:GetService("Players").LocalPlayer
+                    local myName = lp and lp.Name
+                    if myName and tostring(args[1]) == tostring(myName) then
+                        saveCount = saveCount + 1
+                    end
+                end
             end
-        end
+        end)
+        return true
     end
-
-    if controller.Tween then
-        originalTween = controller.Tween
-        controller.Tween = function(self, tile, duration, options)
-            local finalDuration = duration
-            if state.enabled and state.notifDuration > 0 then
-                finalDuration = duration + state.notifDuration
-            end
-            return originalTween and originalTween(self, tile, finalDuration, options) or nil
-        end
-    end
-
-    notifHooked = true
+    return false
 end
 
-local function unhookNotification()
-    -- Batalkan semua thread penundaan notifikasi yang tertunda
-    for threadId, _ in pairs(activeNotifThreads) do
-        pcall(task.cancel, threadId)
-    end
-    table.clear(activeNotifThreads)
+BuyRod              = RF("PurchaseFishingRod")
+BuyBait             = RF("PurchaseBait")
+BuyCharm            = RF("PurchaseCharm")
+REFishDone          = RF("CatchFishCompleted")
+REFishDoneRE        = RE("CatchFishCompleted")
+BuyWeather          = RF("PurchaseWeatherEvent")
+ChargeRod           = RF("ChargeFishingRod")
+StartMini           = RF("RequestFishingMinigameStarted")
+UpdateRadar         = RF("UpdateFishingRadar")
+Cancel              = RF("CancelFishingInputs")
+SellItem            = RF("SellAllItems")
+AutoEnabled         = RF("UpdateAutoFishingState")
+BuyMarket           = RF("PurchaseMarketItem")
+InitiateTrade       = RF("InitiateTrade")
+RFAwaitTradeResponse = RF("AwaitTradeResponse")
+EquipOxygen         = RF("EquipOxygenTank")
+UnequipOxygen       = RF("UnequipOxygenTank")
+ConsumeCrystal      = RF("ConsumeCaveCrystal")
+ConsumePotion       = RF("ConsumePotion")
+threselod           = RF("UpdateAutoSellThreshold")
+dialogevent         = RF("SpecialDialogueEvent")
 
-    if not notifHooked or not textController then return end
-    if originalDeliver then textController.DeliverNotification = originalDeliver end
-    if originalTween then textController.Tween = originalTween end
-    notifHooked = false
+RECutscene          = RE("ReplicateCutscene")
+REStop              = RE("StopCutscene")
+REFav               = RE("FavoriteItem")
+REFavChg            = RE("FavoriteStateChanged")
+REFishGot           = RE("FishCaught")
+RENotify            = RE("TextNotification")
+REEquip             = RE("EquipToolFromHotbar")
+REEquipItem         = RE("EquipItem")
+REAltar             = RE("ActivateEnchantingAltar")
+REAltar2            = RE("ActivateSecondEnchantingAltar")
+REPlayFishEffect    = RE("PlayFishingEffect")
+RETextEffect        = RE("ReplicateTextEffect")
+Totem               = RE("SpawnTotem")
+FishingMinigameChanged = RE("FishingMinigameChanged")
+FishingStopped      = RE("FishingStopped")
+REEvReward          = RE("ClaimEventReward")
+REEquipCharm        = RE("EquipCharm")
+REUnequipCharm      = RE("UnequipCharm")
+BaitSpawned         = RE("BaitSpawned")
+BaitDestroyed       = RE("BaitDestroyed")
+PirateChest         = RE("ClaimPirateChest")
+GainMaze            = RE("GainAccessToMaze")
+PlaceLever          = RE("PlaceLeverItem")
+REDialogueEnded      = RE("DialogueEnded")
+RFCreateTranscendedStone = RF("CreateTranscendedStone")
+EquipBait           = RE("EquipBait")
+
+-- moons.lua: Config / Events / Tasks / needCast / skip / blatantFishCycleCount (FAST 3 KEDIP & UB)
+Config = {
+    HookNotif = false,
+    InstantFishingV2Active = false,
+    isMinig = false,
+    autoFishing = false,
+    AutoCatch = false,
+    antiOKOK = false,
+    amblatant = false,
+    UB = {
+        Active = false,
+        Settings = { CompleteDelay = 3.7, CancelDelay = 0.2, CastMode = "Fast" },
+        Remotes = {},
+        Stats = { castCount = 0, startTime = 0 },
+    },
+}
+Tasks = {}
+blatantFishCycleCount = 0
+needCast = false
+skip = false
+Events = {}
+
+function safeFire(func)
+    task.spawn(function()
+        pcall(func)
+    end)
 end
 
-----------------------------------------------------------------
--- KOMUNIKASI LOKAL RESMI (BindableEvent)
-----------------------------------------------------------------
-
-local localEvent = Instance.new("BindableEvent")
-localEvent.Name = "InstantFishingLocalEvent"
-localEvent.Parent = script  -- Atau ke suatu tempat yang tidak mengganggu
-
---[[
-    Memicu event lokal dengan aman, menggantikan FireLocalEvent exploit-only.
-    Gunakan Instant.OnLocalEvent(callback) untuk mendengarkan.
-]]
-function Instant.FireLocalEvent(...: any)
-    localEvent:Fire(...)
-end
-
---[[
-    Mendaftarkan callback untuk event lokal.
-    @return Connection -- Objek koneksi Roblox, dapat diputus dengan :Disconnect()
-]]
-function Instant.OnLocalEvent(callback: (...any) -> ())
-    return localEvent.Event:Connect(callback)
-end
-
-----------------------------------------------------------------
--- CORE AUTOMATION LOOP
-----------------------------------------------------------------
-
-local function handleCastMode(t0: number): number
-    local mode = state.castMode
-
-    if mode == "Perfect" then
-        local _, power = waitForPower(t0, 0.97)
-        return power
-    end
-
-    if mode == "Random" then
-        local randomElapsed = sharedRandom:NextNumber(0, 1) * (math.pi / 4)
-        if randomElapsed > 0 then
-            task.wait(randomElapsed)
-        end
-    end
-
-    local elapsed = workspace:GetServerTimeNow() - t0
-    return getPowerAtTime(t0, elapsed)
-end
-
-local function startLoop()
-    if state.running then return end
-    state.running = true
-
-    while state.enabled do
-        local t0 = workspace:GetServerTimeNow()
-        
-        safeInvoke(RF_ChargeFishingRod, nil, nil, t0, nil)
-        local power = handleCastMode(t0)
-        safeInvoke(RF_RequestFishingMinigameStarted, 0, power, t0)
-        
-        task.wait(state.completeDelay)
-        safeFire(RE_CatchFishCompleted)
-        task.wait(state.castDelay)
-    end
-
-    state.running = false
-end
-
-----------------------------------------------------------------
--- PUBLIC API & GLUE BINDINGS
-----------------------------------------------------------------
-
-function Instant.SetCastMode(mode: string)
-    if mode == "Perfect" or mode == "Fast" or mode == "Random" then
-        state.castMode = mode
-    end
-end
-
-function Instant.SetCompleteDelay(v: any)
-    local num = tonumber(v)
-    if num and num >= 0 then state.completeDelay = num end
-end
-
-function Instant.SetCastDelay(v: any)
-    local num = tonumber(v)
-    if num and num >= 0 then state.castDelay = num end
-end
-
-function Instant.OnStop(callback: () -> ())
-    onStopCallback = callback
-end
-
-type StartOptions = { hookNotif: boolean? }
-
-function Instant.Start(options: StartOptions?)
-    if state.enabled then return end
-    state.enabled = true
-    
-    local shouldHook = if options and options.hookNotif ~= nil then options.hookNotif else true
-    if shouldHook then
-        hookNotificationDelay()
-    end
-    
-    loopTask = task.spawn(startLoop)
-    
-    -- Integrasi opsional dengan framework global
-    local nextHub = (rawget(_G, "_NEXTHUB") :: any)
-    if nextHub and nextHub.tasks and loopTask then
-        table.insert(nextHub.tasks, loopTask)
-    end
-end
-
-function Instant.Stop()
-    state.enabled = false
-    if loopTask then
-        pcall(task.cancel, loopTask)
-        loopTask = nil
-    end
-    unhookNotification()
-    state.running = false
-    
-    if onStopCallback then
-        pcall(onStopCallback)
-    end
-end
-
--- Akses SavedData terenkapsulasi
-Instant.SavedData = SavedData
-
--- ============================================================
--- COMPATIBILITY INTERFACE (UI GLUE LOGIC)
--- ============================================================
-
--- Fungsi-fungsi ini memudahkan integrasi dengan UI eksternal.
--- Mengandalkan Config yang sudah didefinisikan di atas.
-
-local function UB_start()
-    if not Config or not Config.UB then return end
-    Config.UB.Active = true
-    Config.UB.Stats.startTime = os.clock()
-
-    Instant.SetCompleteDelay(Config.UB.Settings.CompleteDelay)
-    Instant.SetCastDelay(Config.UB.Settings.CancelDelay)
-    Instant.SetCastMode(Config.UB.Settings.CastMode or "Fast")
-    
-    Instant.Start({ hookNotif = Config.HookNotif })
-end
-
-local function UB_stop()
-    if not Config or not Config.UB then return end
-    Config.UB.Active = false
-    Instant.Stop()
-end
-
-local function onToggleUB(value: boolean)
-    if not Config then return end
-    if value then
-        Config.HookNotif = true
-        UB_start()
+-- sleitnick_net often exposes RF/* as RemoteEvent; use FireServer in that case.
+function CallRemoteServer(remote, ...)
+    if not remote then return false end
+    local ok
+    if remote:IsA("RemoteFunction") then
+        ok = select(1, pcall(function(...)
+            remote:InvokeServer(...)
+        end, ...))
+    elseif remote:IsA("RemoteEvent") then
+        ok = select(1, pcall(function(...)
+            remote:FireServer(...)
+        end, ...))
     else
-        UB_stop()
-        Config.HookNotif = false
+        ok = select(1, pcall(function(...)
+            remote:InvokeServer(...)
+        end, ...))
+        if not ok then
+            ok = select(1, pcall(function(...)
+                remote:FireServer(...)
+            end, ...))
+        end
     end
+    return ok
 end
-
--- Ekspor fungsi kompatibilitas
-Instant.OnToggleUB = onToggleUB
-Instant.UB_Start = UB_start
-Instant.UB_Stop = UB_stop
-
--- Untuk kompatibilitas dengan kode lama yang mungkin memanggil CallFishDone,
--- kita sediakan alias ke safeInvoke. Lebih baik arahkan ulang ke safeFire untuk event.
-Instant.CallFishDone = safeFire
-
-return Instant 
 
 Events.equip = GetServerRemote("RF/EquipToolFromHotbar")
 Events.CancelFishingInputs = GetServerRemote("RF/CancelFishingInputs")
