@@ -1,161 +1,78 @@
---!strict
 
---[[
-    RemoteManager - Modul Pemetaan & Event Lokal untuk Sleitnick Net
-    Menggantikan pendekatan lama (RF/RE global, FireLocalEvent exploit-only, _G.SavedData)
-    dengan sistem yang aman, strict-compliant, dan portabel.
-]]
+    ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local netFolder = ReplicatedStorage.Packages._Index["sleitnick_net@0.2.0"].net
+    local netChildren = netFolder:GetChildren()
 
-local RemoteManager = {}
+    -- Deteksi nama hex hash (bukan nama plain)
+    function isHex(name)
+        local stripped = name:gsub("^R[FE]/", "")
+        return #stripped > 16 and stripped:match("^%x+$") ~= nil
+    end
 
--- ============================================================
--- SERVICES & PATH RESOLUTION
--- ============================================================
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
-local packages = ReplicatedStorage:FindFirstChild("Packages")
-local index = packages and packages:FindFirstChild("_Index")
-local netFolder = index and index:FindFirstChild("net", true)  -- rekursif aman
-
--- ============================================================
--- PEMETAAN REMOTE (CLASS MATCHING)
--- ============================================================
-local remoteMap: { [string]: Instance } = {}
-
-if netFolder then
-    local remotes = netFolder:GetChildren()
-    local namedRemotes = {}  -- [cleanName] = { prefix = "RF"/"RE", object = obj }
-    local hexRemotes = {}    -- [hexName] = obj
-
-    for _, obj in ipairs(remotes) do
-        if obj:IsA("RemoteFunction") or obj:IsA("RemoteEvent") then
-            local name = obj.Name
-            local isHex = #name > 32 and name:match("^%x+$") ~= nil
-
-            if isHex then
-                hexRemotes[name] = obj
-            else
-                local prefix, clean = name:match("^(R[FE])/(.+)$")
-                if prefix and clean then
-                    namedRemotes[clean] = { prefix = prefix, object = obj }
-                end
+    -- Build map: "ChargeFishingRod" -> actual hashed Instance
+    local remoteMap = {}
+    for i, child in ipairs(netChildren) do
+        if not isHex(child.Name) then
+            local next = netChildren[i + 1]
+            if next and isHex(next.Name) then
+                local key = child.Name:gsub("^R[FE]/", "")
+                remoteMap[key] = next
             end
         end
     end
 
-    -- Pasangkan dengan menghapus hex yang sudah digunakan
-    local hexPool = {}
-    for hexName, obj in pairs(hexRemotes) do
-        hexPool[hexName] = obj
-    end
+function RF(name) return remoteMap[name] end
+function RE(name) return remoteMap[name] end
 
-    for cleanName, data in pairs(namedRemotes) do
-        local targetClass = data.object.ClassName
-        for hexName, hexObj in pairs(hexPool) do
-            if hexObj.ClassName == targetClass then
-                remoteMap[cleanName] = hexObj
-                hexPool[hexName] = nil
-                break
-            end
-        end
-        if not remoteMap[cleanName] then
-            warn(string.format("[RemoteManager] Remote '%s' tidak mendapat pasangan hex", cleanName))
-        end
-    end
-else
-    warn("[RemoteManager] Folder 'net' tidak ditemukan. Remote mapping gagal.")
-end
-
--- ============================================================
--- AKSES REMOTE (PENGGANTI RF/RE & GetServerRemote)
--- ============================================================
---[=[
-    Mengambil remote berdasarkan nama bersih (tanpa prefix RF/RE).
-    @param name string -- Nama remote seperti "ChargeFishingRod"
-    @return Instance? -- Objek remote atau nil
-]=]
-function RemoteManager.GetRemote(name: string): Instance?
-    return remoteMap[name]
-end
-
---[=[
-    Alternatif: mengambil remote dengan string human-readable seperti "RF/ChargeFishingRod".
-    Hanya untuk kompatibilitas dengan kode yang menggunakan format lama.
-    @param humanName string -- Nama dengan prefix, contoh "RF/ChargeFishingRod"
-    @return Instance?
-]=]
-function RemoteManager.GetServerRemote(humanName: string): Instance?
-    -- Ambil setelah 3 karakter pertama (prefix "RF/" atau "RE/")
-    local clean = humanName:sub(4)
-    return remoteMap[clean]
-end
-
--- ============================================================
--- DATA TERENKAPSULASI (PENGGANTI _G.SavedData)
--- ============================================================
-local SavedData = {
+-- Amblatant support: cached remote data & local event re-fire
+_G.SavedData = _G.SavedData or {
     FishCaught = {},
     CaughtVisual = {},
-    FishNotif = {},
+    FishNotif = {}
 }
-RemoteManager.SavedData = SavedData
 
--- ============================================================
--- FIRE LOCAL EVENT (RESMI, PAKAI BindableEvent)
--- ============================================================
-local localEvent = Instance.new("BindableEvent")
-localEvent.Name = "RemoteManagerLocalEvent"
-localEvent.Parent = script  -- atau letakkan di tempat aman
-
---[=[
-    Memicu event lokal untuk semua listener.
-    @param ... any -- Data yang akan dikirim ke listener
-]=]
-function RemoteManager.FireLocalEvent(...: any)
-    localEvent:Fire(...)
-end
-
---[=[
-    Mendaftarkan callback untuk event lokal.
-    @param callback (...any) -> ()
-    @return Connection -- Dapat diputus dengan :Disconnect()
-]=]
-function RemoteManager.OnLocalEvent(callback: (...any) -> ())
-    return localEvent.Event:Connect(callback)
-end
-
--- ============================================================
--- HOOK REMOTE (PENYEMPURNAAN)
--- ============================================================
-local PlayersService = game:GetService("Players")
-
---[=[
-    Mendengarkan event OnClientEvent dari remote tertentu dan menyimpan data
-    ke SavedData lokal. Juga meneruskan event ke listener FireLocalEvent.
-    Tidak ada batasan saveCount yang membingungkan.
-    @param humanName string -- Nama remote dengan prefix (contoh: "RE/CaughtVisual")
-    @param storageKey string -- Kunci di tabel SavedData untuk menyimpan argumen
-    @return Connection? -- Koneksi yang bisa diputus, atau nil jika gagal
-]=]
-function RemoteManager.HookRemote(humanName: string, storageKey: string): Connection?
-    local remote = RemoteManager.GetServerRemote(humanName)
-    if not remote or not remote:IsA("RemoteEvent") then
-        warn(string.format("[RemoteManager] Gagal hook: %s tidak ditemukan atau bukan RemoteEvent", humanName))
-        return nil
+function FireLocalEvent(remote, ...)
+    if not remote or not remote.OnClientEvent then return end
+    local args = {...}
+    local signal = remote.OnClientEvent
+    for _, connection in pairs(getconnections(signal)) do
+        if connection.Function then
+            task.spawn(function()
+                pcall(function()
+                    connection.Function(unpack(args))
+                end)
+            end)
+        end
     end
-
-    local connection = remote.OnClientEvent:Connect(function(...)
-        local args = { ... }
-        SavedData[storageKey] = args
-
-        -- Trigger lokal event untuk notifikasi ke UI / modul lain
-        RemoteManager.FireLocalEvent("RemoteDataUpdated", storageKey, args)
-    end)
-
-    return connection
 end
 
-return RemoteManager
+local saveCount = 0
+
+function GetServerRemote(humanName)
+    local key = humanName:gsub("^R[FE]/", "")
+    return remoteMap[key]
+end
+
+function HookRemote(humanName, storageKey)
+    local remote = GetServerRemote(humanName)
+    if remote then
+        remote.OnClientEvent:Connect(function(...)
+            if saveCount < 7 then
+                _G.SavedData[storageKey] = {...}
+                local args = {...}
+                if storageKey == "CaughtVisual" then
+                    local lp = game:GetService("Players").LocalPlayer
+                    local myName = lp and lp.Name
+                    if myName and tostring(args[1]) == tostring(myName) then
+                        saveCount = saveCount + 1
+                    end
+                end
+            end
+        end)
+        return true
+    end
+    return false
+end
 
 BuyRod              = RF("PurchaseFishingRod")
 BuyBait             = RF("PurchaseBait")
@@ -9696,3 +9613,466 @@ task.spawn(function()
     task.wait(2)
     Window:LoadConfig(CONFIG_FOLDER, "default")
 end)
+
+
+-- Lynx Panel - Ping & FPS Monitor with Notification Counter
+-- Real ping dari Roblox Stats (Shift+F3)
+ Players = game:GetService("Players")
+ RunService = game:GetService("RunService")
+ Stats = game:GetService("Stats")
+ CoreGui = game:GetService("CoreGui")
+
+ player = Players.LocalPlayer
+ playerGui = player:WaitForChild("PlayerGui")
+
+-- Module untuk monitoring
+local MonitorModule = {}
+MonitorModule.GUI = nil
+
+-- Variables untuk FPS calculation
+local lastFrameTime = tick()
+local fpsHistory = {}
+local maxFPSHistory = 20
+local updateConnection
+local pingUpdateConnection
+local notificationConnection
+
+-- Fungsi untuk membuat GUI
+function createMonitorGUI()
+    local parentGui = playerGui
+    local useCoreGui = pcall(function()
+        local testGui = Instance.new("ScreenGui")
+        testGui.Parent = CoreGui
+        testGui:Destroy()
+    end)
+    
+    if useCoreGui then
+        parentGui = CoreGui
+    end
+    
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "VoraHubMonitor_" .. math.random(1, 999999)
+    screenGui.ResetOnSpawn = false
+    screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    screenGui.DisplayOrder = 2147483647
+    screenGui.Enabled = true
+    screenGui.IgnoreGuiInset = true
+    
+    local container = Instance.new("Frame")
+    container.Name = "Container"
+    container.Size = UDim2.new(0, 200, 0, 100)  -- Increased height untuk notifications
+    container.Position = UDim2.new(0, 250, 0, 100)  -- Moved to the right
+    container.BackgroundColor3 = Color3.fromRGB(20, 30, 50)
+    container.BackgroundTransparency = 0.15
+    container.BorderSizePixel = 0
+    container.Visible = true
+    container.ZIndex = 10000
+    container.Active = true
+    container.Parent = screenGui
+    
+    local containerCorner = Instance.new("UICorner")
+    containerCorner.CornerRadius = UDim.new(0, 10)
+    containerCorner.Parent = container
+    
+    local containerStroke = Instance.new("UIStroke")
+    containerStroke.Color = Color3.fromRGB(50, 150, 255)
+    containerStroke.Thickness = 2
+    containerStroke.Transparency = 0.3
+    containerStroke.Parent = container
+    
+    local header = Instance.new("Frame")
+    header.Name = "Header"
+    header.Size = UDim2.new(1, 0, 0, 35)
+    header.BackgroundTransparency = 1
+    header.ZIndex = 10001
+    header.Parent = container
+    
+    local logoIcon = Instance.new("ImageLabel")
+    logoIcon.Name = "LogoIcon"
+    logoIcon.Size = UDim2.new(0, 24, 0, 24)
+    logoIcon.Position = UDim2.new(0, 8, 0, 5)
+    logoIcon.BackgroundTransparency = 1
+    logoIcon.Image = "rbxassetid://112067161065104"
+    logoIcon.ScaleType = Enum.ScaleType.Fit
+    logoIcon.ImageColor3 = Color3.fromRGB(100, 180, 255)
+    logoIcon.ZIndex = 10002
+    logoIcon.Parent = header
+    
+    local logoCorner = Instance.new("UICorner")
+    logoCorner.CornerRadius = UDim.new(0, 6)
+    logoCorner.Parent = logoIcon
+    
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Name = "TitleLabel"
+    titleLabel.Size = UDim2.new(1, -40, 1, 0)
+    titleLabel.Position = UDim2.new(0, 36, 0, 0)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Text = "VORAHUB PANEL"
+    titleLabel.TextColor3 = Color3.fromRGB(100, 180, 255)
+    titleLabel.TextSize = 13
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    titleLabel.ZIndex = 10002
+    titleLabel.Parent = header
+    
+    local separator = Instance.new("Frame")
+    separator.Name = "Separator"
+    separator.Size = UDim2.new(1, -16, 0, 1)
+    separator.Position = UDim2.new(0, 8, 0, 35)
+    separator.BackgroundColor3 = Color3.fromRGB(50, 150, 255)
+    separator.BackgroundTransparency = 0.5
+    separator.BorderSizePixel = 0
+    separator.ZIndex = 10001
+    separator.Parent = container
+    
+    local content = Instance.new("Frame")
+    content.Name = "Content"
+    content.Size = UDim2.new(1, -16, 0, 60)  -- Fixed height untuk content
+    content.Position = UDim2.new(0, 8, 0, 40)
+    content.BackgroundTransparency = 1
+    content.ZIndex = 10001
+    content.Parent = container
+    
+    -- Row 1: Ping & FPS
+    local pingLabel = Instance.new("TextLabel")
+    pingLabel.Name = "PingLabel"
+    pingLabel.Size = UDim2.new(0.5, -6, 0, 25)
+    pingLabel.Position = UDim2.new(0, 0, 0, 0)
+    pingLabel.BackgroundTransparency = 1
+    pingLabel.Text = "Ping: 0 ms"
+    pingLabel.TextColor3 = Color3.fromRGB(150, 200, 255)
+    pingLabel.TextSize = 13
+    pingLabel.Font = Enum.Font.GothamBold
+    pingLabel.TextXAlignment = Enum.TextXAlignment.Center
+    pingLabel.ZIndex = 10002
+    pingLabel.Parent = content
+    
+    local verticalSeparator = Instance.new("Frame")
+    verticalSeparator.Name = "VerticalSeparator"
+    verticalSeparator.Size = UDim2.new(0, 1, 0, 25)
+    verticalSeparator.Position = UDim2.new(0.5, 0, 0, 0)
+    verticalSeparator.BackgroundColor3 = Color3.fromRGB(50, 150, 255)
+    verticalSeparator.BackgroundTransparency = 0.5
+    verticalSeparator.BorderSizePixel = 0
+    verticalSeparator.ZIndex = 10001
+    verticalSeparator.Parent = content
+    
+    local fpsLabel = Instance.new("TextLabel")
+    fpsLabel.Name = "FPSLabel"
+    fpsLabel.Size = UDim2.new(0.5, -6, 0, 25)
+    fpsLabel.Position = UDim2.new(0.5, 6, 0, 0)
+    fpsLabel.BackgroundTransparency = 1
+    fpsLabel.Text = "FPS: 60"
+    fpsLabel.TextColor3 = Color3.fromRGB(100, 255, 200)
+    fpsLabel.TextSize = 13
+    fpsLabel.Font = Enum.Font.GothamBold
+    fpsLabel.TextXAlignment = Enum.TextXAlignment.Center
+    fpsLabel.ZIndex = 10002
+    fpsLabel.Parent = content
+    
+    -- Horizontal separator
+    local horizontalSeparator = Instance.new("Frame")
+    horizontalSeparator.Name = "HorizontalSeparator"
+    horizontalSeparator.Size = UDim2.new(1, 0, 0, 1)
+    horizontalSeparator.Position = UDim2.new(0, 0, 0, 30)
+    horizontalSeparator.BackgroundColor3 = Color3.fromRGB(50, 150, 255)
+    horizontalSeparator.BackgroundTransparency = 0.5
+    horizontalSeparator.BorderSizePixel = 0
+    horizontalSeparator.ZIndex = 10001
+    horizontalSeparator.Parent = content
+    
+    -- Row 2: Notifications
+    local notifLabel = Instance.new("TextLabel")
+    notifLabel.Name = "NotifLabel"
+    notifLabel.Size = UDim2.new(1, 0, 0, 25)
+    notifLabel.Position = UDim2.new(0, 0, 0, 35)
+    notifLabel.BackgroundTransparency = 1
+    notifLabel.Text = "Notifications: 0"
+    notifLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
+    notifLabel.TextSize = 13
+    notifLabel.Font = Enum.Font.GothamBold
+    notifLabel.TextXAlignment = Enum.TextXAlignment.Center
+    notifLabel.ZIndex = 10002
+    notifLabel.Parent = content
+    
+    -- Make draggable
+    local dragging = false
+    local dragInput, dragStart, startPos
+    local UserInputService = game:GetService("UserInputService")
+    
+    container.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = container.Position
+            
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+    
+    container.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            container.Position = UDim2.new(
+                startPos.X.Scale,
+                startPos.X.Offset + delta.X,
+                startPos.Y.Scale,
+                startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+    
+    screenGui.Parent = parentGui
+    
+    task.spawn(function()
+        while screenGui and screenGui.Parent do
+            task.wait(1)
+            if screenGui and screenGui.Parent then
+                screenGui.DisplayOrder = 2147483647
+            end
+        end
+    end)
+    
+    return {
+        ScreenGui = screenGui,
+        Container = container,
+        PingLabel = pingLabel,
+        FPSLabel = fpsLabel,
+        NotifLabel = notifLabel,
+        LogoIcon = logoIcon,
+        ParentType = useCoreGui and "CoreGui" or "PlayerGui"
+    }
+end
+
+-- Get real ping from Roblox Stats (sama seperti Shift+F3)
+function getRealPing()
+    local success, ping = pcall(function()
+        -- Ambil dari Stats.Network.ServerStatsItem["Data Ping"]
+        local networkStats = Stats:FindFirstChild("Network")
+        if networkStats then
+            local serverStats = networkStats:FindFirstChild("ServerStatsItem")
+            if serverStats then
+                local dataPing = serverStats:FindFirstChild("Data Ping")
+                if dataPing then
+                    local pingValue = dataPing:GetValue()
+                    return math.floor(pingValue)
+                end
+            end
+        end
+        -- Fallback ke GetNetworkPing
+        return math.floor(player:GetNetworkPing() * 1000)
+    end)
+    return success and ping or 0
+end
+
+-- Get FPS
+function getFPS()
+    local currentTime = tick()
+    local deltaTime = currentTime - lastFrameTime
+    lastFrameTime = currentTime
+    
+    local currentFPS = 0
+    if deltaTime > 0 then
+        currentFPS = 1 / deltaTime
+    end
+    
+    table.insert(fpsHistory, currentFPS)
+    
+    if #fpsHistory > maxFPSHistory then
+        table.remove(fpsHistory, 1)
+    end
+    
+    local sum = 0
+    for _, fps in ipairs(fpsHistory) do
+        sum = sum + fps
+    end
+    
+    local averageFPS = sum / #fpsHistory
+    return math.floor(math.clamp(averageFPS, 0, 240))
+end
+
+-- Get total notifications (count semua object bernama "Tile")
+function getTotalNotifications()
+    local success, count = pcall(function()
+        local textNotifications = playerGui:FindFirstChild("Text Notifications")
+        if textNotifications then
+            local frame = textNotifications:FindFirstChild("Frame")
+            if frame then
+                -- Count semua object yang bernama "Tile"
+                local notifCount = 0
+                for _, child in ipairs(frame:GetChildren()) do
+                    if child.Name == "Tile" then
+                        notifCount = notifCount + 1
+                    end
+                end
+                return notifCount
+            end
+        end
+        return 0
+    end)
+    return success and count or 0
+end
+
+-- Update colors
+ function updatePingColor(pingLabel, value)
+    local ping = tonumber(value)
+    if ping <= 50 then
+        pingLabel.TextColor3 = Color3.fromRGB(100, 255, 200)
+    elseif ping <= 100 then
+        pingLabel.TextColor3 = Color3.fromRGB(150, 200, 255)
+    elseif ping <= 150 then
+        pingLabel.TextColor3 = Color3.fromRGB(180, 140, 255)
+    else
+        pingLabel.TextColor3 = Color3.fromRGB(255, 100, 150)
+    end
+end
+
+ function updateFPSColor(fpsLabel, value)
+    local fps = tonumber(value)
+    if fps >= 55 then
+        fpsLabel.TextColor3 = Color3.fromRGB(100, 255, 200)
+    elseif fps >= 40 then
+        fpsLabel.TextColor3 = Color3.fromRGB(150, 200, 255)
+    elseif fps >= 25 then
+        fpsLabel.TextColor3 = Color3.fromRGB(180, 140, 255)
+    else
+        fpsLabel.TextColor3 = Color3.fromRGB(255, 100, 150)
+    end
+end
+
+ function updateNotifColor(notifLabel, value)
+    local count = tonumber(value)
+    if count == 0 then
+        notifLabel.TextColor3 = Color3.fromRGB(150, 200, 255)
+    elseif count <= 5 then
+        notifLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
+    elseif count <= 10 then
+        notifLabel.TextColor3 = Color3.fromRGB(255, 150, 100)
+    else
+        notifLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+    end
+end
+
+-- Show panel
+function MonitorModule:Show()
+    if self.GUI then
+        self.GUI.ScreenGui.Enabled = true
+        return
+    end
+    
+    self.GUI = createMonitorGUI()
+    print("[VoraHub Monitor] Started in:", self.GUI.ParentType)
+    
+    -- Update FPS
+    updateConnection = RunService.RenderStepped:Connect(function()
+        if not self.GUI or not self.GUI.ScreenGui or not self.GUI.ScreenGui.Parent then
+            if updateConnection then
+                updateConnection:Disconnect()
+            end
+            return
+        end
+        if not self.GUI.FPSLabel then
+            return
+        end
+        
+        local fps = getFPS()
+        self.GUI.FPSLabel.Text = "FPS: " .. tostring(fps)
+        updateFPSColor(self.GUI.FPSLabel, fps)
+    end)
+    
+    -- Update ping (real ping dari Stats)
+    local lastPingUpdate = 0
+    pingUpdateConnection = RunService.Heartbeat:Connect(function()
+        if not self.GUI or not self.GUI.ScreenGui or not self.GUI.ScreenGui.Parent then
+            if pingUpdateConnection then
+                pingUpdateConnection:Disconnect()
+            end
+            return
+        end
+        if not self.GUI.PingLabel then
+            return
+        end
+        
+        local currentTime = tick()
+        if currentTime - lastPingUpdate >= 0.5 then
+            local ping = getRealPing()
+            self.GUI.PingLabel.Text = "Ping: " .. ping .. " ms"
+            updatePingColor(self.GUI.PingLabel, ping)
+            lastPingUpdate = currentTime
+        end
+    end)
+    
+    -- Update notifications count
+    local lastNotifUpdate = 0
+    notificationConnection = RunService.Heartbeat:Connect(function()
+        if not self.GUI or not self.GUI.ScreenGui or not self.GUI.ScreenGui.Parent then
+            if notificationConnection then
+                notificationConnection:Disconnect()
+            end
+            return
+        end
+        if not self.GUI.NotifLabel then
+            return
+        end
+        
+        local currentTime = tick()
+        if currentTime - lastNotifUpdate >= 1 then  -- Update every 1 second
+            local notifCount = getTotalNotifications()
+            self.GUI.NotifLabel.Text = "Notifications: " .. notifCount
+            updateNotifColor(self.GUI.NotifLabel, notifCount)
+            lastNotifUpdate = currentTime
+        end
+    end)
+end
+
+-- Hide, Toggle, Destroy methods
+function MonitorModule:Hide()
+    if self.GUI and self.GUI.ScreenGui then
+        self.GUI.ScreenGui.Enabled = false
+    end
+end
+
+function MonitorModule:Toggle()
+    if self.GUI and self.GUI.ScreenGui then
+        self.GUI.ScreenGui.Enabled = not self.GUI.ScreenGui.Enabled
+    else
+        self:Show()
+    end
+end
+
+function MonitorModule:Destroy()
+    if updateConnection then
+        updateConnection:Disconnect()
+        updateConnection = nil
+    end
+    
+    if pingUpdateConnection then
+        pingUpdateConnection:Disconnect()
+        pingUpdateConnection = nil
+    end
+    
+    if notificationConnection then
+        notificationConnection:Disconnect()
+        notificationConnection = nil
+    end
+    
+    if self.GUI and self.GUI.ScreenGui then
+        self.GUI.ScreenGui:Destroy()
+        self.GUI = nil
+    end
+    
+    fpsHistory = {}
+end
+
+-- Auto-start monitor
+MonitorModule:Show()
