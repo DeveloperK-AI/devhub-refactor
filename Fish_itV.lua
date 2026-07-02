@@ -6307,50 +6307,37 @@ AutoTab:CreateToggle({
 
 AutoTab:CreateSection({ Name = "Enchant Features", Icon = "rbxassetid://7733801202" })
 
--- ============================================
--- ENCHANT STONE IDs
--- ============================================
-local STONE_IDS = {
-    ["Enchant Stones"] = 10,
-    ["Evolved Enchant Stone"] = 558
-}
+--!strict
 
-_G.SelectedStoneType = _G.SelectedStoneType or "Enchant Stones"
+-- ============================================================
+-- ENCHANT FEATURES (FULL REFACTOR – DYNAMIC STONE DETECTION)
+-- ============================================================
+-- Asumsi environment: AutoTab, Data, ItemUtility, LocalPlayer,
+-- equipItemRemote, equipToolRemote, activateAltarRemote
 
-function gStone()
-    local it = Data:GetExpect({ "Inventory", "Items" })
-    if not it then return 0 end
-    
-    local targetId = STONE_IDS[_G.SelectedStoneType]
-    local total = 0
-    
-    for _, v in ipairs(it) do
-        if v.Id == targetId then
-            total = total + (v.Quantity or 1)
-        end
-    end
-    return total
-end
+local Players = game:GetService("Players")
+local LocalPlayer = LocalPlayer or Players.LocalPlayer
+if not LocalPlayer then return end
 
--- ============================================
--- ENCHANT LISTS
--- ============================================
-local basicEnchantNames = {
-    "Big Hunter 1", "Cursed 1", "Empowered 1", "Glistening 1",
-    "Gold Digger 1", "Leprechaun 1", "Leprechaun 2",
-    "Mutation Hunter 1", "Mutation Hunter 2", "Prismatic 1",
-    "Reeler 1", "Stargazer 1", "Stormhunter 1", "XPerienced 1"
-}
+-- ============================================================
+-- STATE LOKAL (GANTI _G)
+-- ============================================================
+local SelectedStoneType = "Enchant Stones"       -- akan diisi dinamis nanti
+local TargetEnchantBasic = "Big Hunter 1"
+local TargetEnchantEvolved = "SECRET Hunter"
+local AutoEnchant = false
 
-local evolvedEnchantNames = {
-    "Prismatic 1", "Cursed 1", "Gold Digger 1", "Empowered 1",
-    "SECRET Hunter", "Shark Hunter", "Stargazer II", "Stormhunter II",
-    "Mutation Hunter II", "Leprechaun II", "Reeler II", "Mutation Hunter III",
-    "Fairy Hunter 1"
-}
+-- Untuk backward compatibility, tetap sinkronkan ke _G (opsional)
+_G.SelectedStoneType = SelectedStoneType
+_G.TargetEnchantBasic = TargetEnchantBasic
+_G.TargetEnchantEvolved = TargetEnchantEvolved
+_G.AutoEnchant = AutoEnchant
 
-local enchantIdMap = {
-    -- Basic Enchants
+-- ============================================================
+-- ENCHANT ID MAP (TETAP)
+-- ============================================================
+local ENCHANT_ID_MAP: { [string]: number } = {
+    --Basic
     ["Big Hunter 1"] = 3,
     ["Cursed 1"] = 12,
     ["Empowered 1"] = 9,
@@ -6365,8 +6352,7 @@ local enchantIdMap = {
     ["Stargazer 1"] = 8,
     ["Stormhunter 1"] = 11,
     ["XPerienced 1"] = 10,
-    
-    -- Evolved Enchants
+    -- Evolved (beberapa ID sama, tapi map tetap bisa digunakan)
     ["SECRET Hunter"] = 16,
     ["Shark Hunter"] = 20,
     ["Stargazer II"] = 17,
@@ -6375,75 +6361,124 @@ local enchantIdMap = {
     ["Leprechaun II"] = 6,
     ["Reeler II"] = 21,
     ["Mutation Hunter III"] = 22,
-    ["Fairy Hunter 1"] = 15
+    ["Fairy Hunter 1"] = 15,
+	--Runic Enchant Stone
+	["Mutation Hunter II"] = 33,
+	["Mutation Hunter III"] = 10,
+	["Glistening II"] = 30,
+	["XPerienced II"] = 10,
+	["Shark Hunter I"] = 5,
+	["Shark Hunter II"] = 3,
+	["Empowered II"] = 3,
+	["Cursed II"] = 3,
+	["FORGOTTEN Hunter"] = 3
 }
 
-function countDisplayImageButtons()
-    local success, backpackGui = pcall(function() return LocalPlayer.PlayerGui.Backpack end)
-    if not success or not backpackGui then return 0 end
-    local display = backpackGui:FindFirstChild("Display")
-    if not display then return 0 end
-    local imageButtonCount = 0
-    for _, child in ipairs(display:GetChildren()) do
-        if child:IsA("ImageButton") then
-            imageButtonCount = imageButtonCount + 1
+local BASIC_ENCHANT_NAMES = {
+    "Big Hunter 1", "Cursed 1", "Empowered 1", "Glistening 1",
+    "Gold Digger 1", "Leprechaun 1", "Leprechaun 2",
+    "Mutation Hunter 1", "Mutation Hunter 2", "Prismatic 1",
+    "Reeler 1", "Stargazer 1", "Stormhunter 1", "XPerienced 1",
+}
+
+local EVOLVED_ENCHANT_NAMES = {
+    "Prismatic 1", "Cursed 1", "Gold Digger 1", "Empowered 1",
+    "SECRET Hunter", "Shark Hunter", "Stargazer II", "Stormhunter II",
+    "Mutation Hunter II", "Leprechaun II", "Reeler II", "Mutation Hunter III",
+    "Fairy Hunter 1",
+}
+
+local RUNIC_ENCHANT_NAMES: { string } = {
+	"Mutation Hunter III","Glistening II","XPerienced II","Mutation Hunter II",
+	"Shark Hunter I","Shark Hunter II","Empowered II","Cursed II",
+	"FORGOTTEN Hunter",
+}
+
+-- ============================================================
+-- DETEKSI DINAMIS TIPE BATU DI INVENTORY
+-- ============================================================
+local function getAvailableStoneTypes(): { string }
+    local items = Data and Data:GetExpect({ "Inventory", "Items" })
+    if not items then return {} end
+    local types = {}
+    for _, item in ipairs(items) do
+        local itemData = ItemUtility.GetItemData(item.Id)
+        if itemData and itemData.Data and itemData.Data.Type == "Enchant Stones" then
+            local name = itemData.Data.Name
+            if name and not table.find(types, name) then
+                table.insert(types, name)
+            end
         end
     end
-    return imageButtonCount
+    -- Fallback: jika inventory kosong, tetap tampilkan default
+    if #types == 0 then
+        types = { "Enchant Stones", "Evolved Enchant Stone", "Runic Enchant Stone" }
+    end
+    return types
 end
 
-function findEnchantStones()
-    if not Data then return {} end
-    
-    local inventory = Data:GetExpect({ "Inventory", "Items" })
-    if not inventory then return {} end
-    
-    local targetId = STONE_IDS[_G.SelectedStoneType]
+-- Pilih default dari inventory jika memungkinkan
+local availableTypes = getAvailableStoneTypes()
+if #availableTypes > 0 then
+    SelectedStoneType = availableTypes[1]
+end
+
+-- ============================================================
+-- HELPER FUNCTIONS
+-- ============================================================
+
+local function getStoneCount(): number
+    local items = Data and Data:GetExpect({ "Inventory", "Items" })
+    if not items then return 0 end
+    local total = 0
+    for _, item in ipairs(items) do
+        local itemData = ItemUtility.GetItemData(item.Id)
+        if itemData and itemData.Data and itemData.Data.Name == SelectedStoneType then
+            total = total + (item.Quantity or 1)
+        end
+    end
+    return total
+end
+
+local function findEnchantStones(): { UUID: string, Quantity: number }
+    local items = Data and Data:GetExpect({ "Inventory", "Items" })
+    if not items then return {} end
     local stones = {}
-    
-    for _, item in pairs(inventory) do
-        if item.Id == targetId then
-            table.insert(stones, { 
-                UUID = item.UUID, 
+    for _, item in ipairs(items) do
+        local itemData = ItemUtility.GetItemData(item.Id)
+        if itemData and itemData.Data and itemData.Data.Name == SelectedStoneType then
+            table.insert(stones, {
+                UUID = item.UUID,
                 Quantity = item.Quantity or 1,
-                Id = item.Id
             })
         end
     end
-    
     return stones
 end
 
-function getEquippedRodName()
+local function getEquippedRodName(): string
+    if not Data then return "None" end
     local equipped = Data:Get("EquippedItems")
     if not equipped then return "None" end
-    
     local rods = Data:GetExpect({ "Inventory", "Fishing Rods" })
     if not rods then return "None" end
-    
     for _, uuid in pairs(equipped) do
         for _, rod in ipairs(rods) do
             if rod.UUID == uuid then
-                local itemData = ItemUtility:GetItemData(rod.Id)
-                if itemData and itemData.Data and itemData.Data.Name then
-                    return itemData.Data.Name
-                elseif rod.ItemName then
-                    return rod.ItemName
-                end
+                local itemData = ItemUtility.GetItemData(rod.Id)
+                return (itemData and itemData.Data and itemData.Data.Name) or rod.ItemName or "None"
             end
         end
     end
     return "None"
 end
 
-function getCurrentRodEnchant()
+local function getCurrentEnchantId(): number?
     if not Data then return nil end
     local equipped = Data:Get("EquippedItems")
     if not equipped then return nil end
-    
     local rods = Data:GetExpect({ "Inventory", "Fishing Rods" })
     if not rods then return nil end
-    
     for _, uuid in pairs(equipped) do
         for _, rod in ipairs(rods) do
             if rod.UUID == uuid and rod.Metadata and rod.Metadata.EnchantId then
@@ -6454,296 +6489,248 @@ function getCurrentRodEnchant()
     return nil
 end
 
-local Paragraph = AutoTab:CreateParagraph({
+local function getEnchantNameFromId(id: number): string
+    for name, eid in pairs(ENCHANT_ID_MAP) do
+        if eid == id then return name end
+    end
+    return "None"
+end
+
+-- Data lengkap (gunakan total batu, bukan slot)
+local function getEnchantData(): (string, string, number)
+    local rodName = getEquippedRodName()
+    local currentId = getCurrentEnchantId()
+    local enchantName = currentId and getEnchantNameFromId(currentId) or "None"
+    local totalStones = getStoneCount()   -- sekarang total kuantitas
+    return rodName, enchantName, totalStones
+end
+
+-- ============================================================
+-- UI SETUP
+-- ============================================================
+AutoTab:CreateSection({ Name = "Enchant Features", Icon = "rbxassetid://7733801202" })
+
+local EnchantParagraph = AutoTab:CreateParagraph({
     Title = "Enchanting Features",
-    Content = "Rod Active = <font color='#00aaff'>None</font>\nEnchant Now = <font color='#ff00ff'>None</font>\nStone Left = <font color='#ffff00'>0</font>\nStone Type = <font color='#00ff00'>Enchant Stones</font>"
+    Content = "Loading...",
+    RichText = true,
 })
 
-spawn(function()
-    local lastRodName, lastEnchantName, lastTotalStones, lastStoneType = "", "", -1, ""
-    
+local function updateEnchantParagraph()
+    local rodName, enchantName, stoneCount = getEnchantData()
+    local desc = string.format(
+        "Rod Active <font color='rgb(0,191,255)'>= %s</font>\n" ..
+        "Enchant Now <font color='rgb(200,0,255)'>= %s</font>\n" ..
+        "Stone Left <font color='rgb(255,215,0)'>= %d</font>\n" ..
+        "Stone Type <font color='rgb(0,255,0)'>= %s</font>",
+        rodName, enchantName, stoneCount, SelectedStoneType
+    )
+    EnchantParagraph:SetDesc(desc)
+end
+
+-- Update loop
+local lastData = ""
+task.spawn(function()
     while task.wait(4) do
         pcall(function()
-            local totalStones = gStone()
-            local rodName = getEquippedRodName()
-            local currentEnchantId = getCurrentRodEnchant()
-            local currentEnchantName = "None"
-            
-            if currentEnchantId then
-                for name, id in pairs(enchantIdMap) do
-                    if id == currentEnchantId then
-                        currentEnchantName = name
-                        break
-                    end
-                end
-            end
-            
-            if rodName ~= lastRodName or currentEnchantName ~= lastEnchantName or 
-               totalStones ~= lastTotalStones or _G.SelectedStoneType ~= lastStoneType then
-                
-                local desc =
-                    "Rod Active <font color='rgb(0,191,255)'>= " .. rodName .. "</font>\n" ..
-                    "Enchant Now <font color='rgb(200,0,255)'>= " .. currentEnchantName .. "</font>\n" ..
-                    "Stone Left <font color='rgb(255,215,0)'>= " .. totalStones .. "</font>\n" ..
-                    "Stone Type <font color='rgb(0,255,0)'>= " .. _G.SelectedStoneType .. "</font>"
-                
-                Paragraph:SetDesc(desc)
-                
-                lastRodName = rodName
-                lastEnchantName = currentEnchantName
-                lastTotalStones = totalStones
-                lastStoneType = _G.SelectedStoneType
+            local rod, ench, count = getEnchantData()
+            local newData = rod .. ench .. tostring(count) .. SelectedStoneType
+            if newData ~= lastData then
+                updateEnchantParagraph()
+                lastData = newData
             end
         end)
     end
 end)
 
--- ============================================
--- DROPDOWN STONE TYPE
--- ============================================
+-- ============================================================
+-- UI ELEMENTS
+-- ============================================================
+
+-- Dropdown tipe batu (dinamis)
 AutoTab:CreateDropdown({
     Name = "Enchant Stone Type",
-    Items = {"Enchant Stones", "Evolved Enchant Stone"},
-    Value = _G.SelectedStoneType,
+    Items = availableTypes,
+    Value = SelectedStoneType,
     Callback = function(selected)
+        SelectedStoneType = selected
         _G.SelectedStoneType = selected
-        print("[Enchant] 🪨 Stone Type:", selected, "| ID:", STONE_IDS[selected])
-    end
+        updateEnchantParagraph()
+    end,
 })
 
+-- Teleport buttons (tetap)
 AutoTab:CreateButton({
     Name = "Teleport to Altar",
     Icon = "rbxassetid://128755575520135",
     Callback = function()
-        local targetCFrame = CFrame.new(3234.83667, -1302.85486, 1398.39087, 0.464485794, -1.12043161e-07, -0.885580599, 6.74793981e-08, 1, -9.11265872e-08, 0.885580599, -1.74314394e-08, 0.464485794)
-        local character = LocalPlayer.Character
-        if character then
-            local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
-            if humanoidRootPart then
-                humanoidRootPart.CFrame = targetCFrame
-            end
+        local char = LocalPlayer.Character
+        if char and char:FindFirstChild("HumanoidRootPart") then
+            char:FindFirstChild("HumanoidRootPart").CFrame = CFrame.new(3234.84, -1302.85, 1398.39, 0.464485794, -1.12e-07, -0.8855806, 6.7479e-08, 1, -9.1127e-08, 0.8855806, -1.7431e-08, 0.4644858)
         end
-    end
+    end,
 })
 
 AutoTab:CreateButton({
     Name = "Teleport to Second Altar",
     Icon = "rbxassetid://7733920644",
     Callback = function()
-        local character = LocalPlayer.Character
-        if character and character:FindFirstChild("HumanoidRootPart") then
-            local targetCFrame = CFrame.new(1481, 128, -592)
-            character:PivotTo(targetCFrame)
+        local char = LocalPlayer.Character
+        if char and char:FindFirstChild("HumanoidRootPart") then
+            char:PivotTo(CFrame.new(1481, 128, -592))
         end
-    end
+    end,
 })
 
--- ============================================
--- DROPDOWN 1: TARGET ENCHANT (BASIC STONES)
--- ============================================
+-- Target enchants
 AutoTab:CreateDropdown({
     Name = "Target Enchant (Basic)",
-    Items = basicEnchantNames,
-    Value = _G.TargetEnchantBasic or basicEnchantNames[1],
+    Items = BASIC_ENCHANT_NAMES,
+    Value = TargetEnchantBasic,
     Callback = function(selected)
+        TargetEnchantBasic = selected
         _G.TargetEnchantBasic = selected
-        local enchantId = enchantIdMap[selected]
-        print("[Enchant] 🎯 Basic Target:", selected, "| ID:", enchantId)
-    end
+    end,
 })
 
--- ============================================
--- DROPDOWN 2: TARGET ENCHANT (EVOLVED STONES)
--- ============================================
 AutoTab:CreateDropdown({
     Name = "Target Enchant (Evolved)",
-    Items = evolvedEnchantNames,
-    Value = _G.TargetEnchantEvolved or evolvedEnchantNames[1],
+    Items = EVOLVED_ENCHANT_NAMES,
+    Value = TargetEnchantEvolved,
     Callback = function(selected)
+        TargetEnchantEvolved = selected
         _G.TargetEnchantEvolved = selected
-        local enchantId = enchantIdMap[selected]
-        print("[Enchant] 🎯 Evolved Target:", selected, "| ID:", enchantId)
-    end
+    end,
 })
 
+AutoTab:CreateDropdown({
+    Name = "Target Enchant (Runic)",
+    Items = RUNIC_ENCHANT_NAMES,
+    Value = TargetEnchantRunic,
+    Callback = function(selected)
+        TargetEnchantRunic = selected
+        _G.TargetEnchantRunic = selected
+    end,
+})
+
+-- Toggle Auto Enchant
 AutoTab:CreateToggle({
     Name = "Auto Enchant",
-    Value = _G.AutoEnchant or false,
+    Value = AutoEnchant,
     Callback = function(value)
+        AutoEnchant = value
         _G.AutoEnchant = value
-        
+        local target = SelectedStoneType == "Evolved Enchant Stone" and TargetEnchantEvolved or TargetEnchantBasic
         if value then
-            -- Determine which target to use based on stone type
-            local targetEnchant = _G.SelectedStoneType == "Evolved Enchant Stone" 
-                and _G.TargetEnchantEvolved 
-                or _G.TargetEnchantBasic
-            
-            print("========================================")
-            print("[Enchant] 🔄 Auto Enchant: ENABLED")
-            print("[Enchant] 🎯 Target:", targetEnchant)
-            print("[Enchant] 🪨 Stone:", _G.SelectedStoneType)
-            print("========================================")
-        else
-            print("[Enchant] 🔴 Auto Enchant: DISABLED")
+            Window:Notify({ Title = "Auto Enchant", Content = "Target: " .. target, Duration = 2 })
         end
-    end
+    end,
 })
 
-function getData()
-    local rod, ench, stones, uuids = "None", "None", 0, {}
-    local equipped = Data:Get("EquippedItems")
-    if not equipped then return rod, ench, stones, uuids end
-    
-    local rods = Data:Get({ "Inventory", "Fishing Rods" })
-    if not rods then return rod, ench, stones, uuids end
-
-    for _, u in pairs(equipped) do
-        for _, r in ipairs(rods) do
-            if r.UUID == u then
-                local d = ItemUtility:GetItemData(r.Id)
-                rod = (d and d.Data.Name) or r.ItemName or "None"
-                if r.Metadata and r.Metadata.EnchantId then
-                    local e = ItemUtility:GetEnchantData(r.Metadata.EnchantId)
-                    ench = (e and e.Data.Name) or "None"
-                end
-            end
-        end
-    end
-
-    local targetId = STONE_IDS[_G.SelectedStoneType]
-    local inv = Data:GetExpect({ "Inventory", "Items" })
-    if inv then
-        for _, it in pairs(inv) do
-            if it.Id == targetId then
-                stones = stones + 1
-                table.insert(uuids, it.UUID)
-            end
-        end
-    end
-    
-    return rod, ench, stones, uuids
-end
-
+-- Double Enchant Button
 AutoTab:CreateButton({
     Name = "Start Double Enchant",
     Icon = "rbxassetid://7733920644",
     Callback = function()
         task.spawn(function()
-            local rod, ench, s, uuids = getData()
-            if rod == "None" then 
-                warn("[Enchant] ❌ No rod equipped!")
-                return 
+            local rodName, enchantName, stoneCount = getEnchantData()
+            if rodName == "None" then
+                Window:Notify({ Title = "Error", Content = "No rod equipped!", Duration = 2 })
+                return
             end
-            
-            if s <= 0 then
-                warn("[Enchant] ❌ No", _G.SelectedStoneType, "available!")
-                return 
+            if stoneCount == 0 then
+                Window:Notify({ Title = "Error", Content = "No " .. SelectedStoneType .. " available!", Duration = 2 })
+                return
             end
+            local stones = findEnchantStones()
+            local stoneUUID = stones[1] and stones[1].UUID
+            if not stoneUUID then return end
 
-            print("[Enchant] 🔥 Starting Double Enchant with", _G.SelectedStoneType)
-
-            local slot, start = nil, tick()
-            while tick() - start < 5 do
+            -- Equip stone
+            local slot = nil
+            local startTime = tick()
+            while tick() - startTime < 5 do
                 local equipped = Data:Get("EquippedItems")
                 if equipped then
                     for sl, id in pairs(equipped) do
-                        if id == uuids[1] then 
-                            slot = sl 
+                        if id == stoneUUID then
+                            slot = sl
                             break
                         end
                     end
                 end
                 if slot then break end
-                
-                pcall(function()
-                    equipItemRemote:FireServer(uuids[1], "EnchantStones")
-                end)
+                pcall(function() equipItemRemote:FireServer(stoneUUID, "EnchantStones") end)
                 task.wait(0.3)
             end
-            
-            if not slot then 
-                warn("[Enchant] ❌ Failed to equip stone!")
-                return 
+
+            if not slot then
+                Window:Notify({ Title = "Error", Content = "Failed to equip stone!", Duration = 2 })
+                return
             end
 
             task.wait(0.2)
-            pcall(function()
-                equipToolRemote:FireServer(slot)
-            end)
-            
+            pcall(function() equipToolRemote:FireServer(slot) end)
             task.wait(0.2)
-            pcall(function()
-                activateAltarRemote:FireServer()
-            end)
-            
-            print("[Enchant] ✅ Double Enchant activated!")
+            pcall(function() activateAltarRemote:FireServer() end)
+            Window:Notify({ Title = "Enchant", Content = "Double Enchant triggered!", Duration = 2 })
         end)
-    end
+    end,
 })
 
-spawn(function()
+-- ============================================================
+-- AUTO ENCHANT LOOP (DIPERBAIKI)
+-- ============================================================
+local autoEnchantThread = task.spawn(function()
     while task.wait(0.8) do
-        if _G.AutoEnchant then
-            pcall(function()
-                -- Get target based on stone type
-                local targetEnchant = _G.SelectedStoneType == "Evolved Enchant Stone" 
-                    and _G.TargetEnchantEvolved 
-                    or _G.TargetEnchantBasic
-                
-                local currentEnchantId = getCurrentRodEnchant()
-                local targetEnchantId = enchantIdMap[targetEnchant]
+        if not AutoEnchant then continue end
 
-                if not targetEnchantId then
-                    warn("[Enchant] ❌ Invalid target enchant:", targetEnchant)
-                    _G.AutoEnchant = false
-                    return
-                end
+        pcall(function()
+            local targetEnchant = SelectedStoneType == "Evolved Enchant Stone"
+                and TargetEnchantEvolved or TargetEnchantBasic or TargetEnchantRunic
+            local currentId = getCurrentEnchantId()	
+            local targetId = ENCHANT_ID_MAP[targetEnchant]
+            if not targetId then
+                AutoEnchant = false
+                Window:Notify({ Title = "Error", Content = "Invalid target enchant!", Duration = 2 })
+                return
+            end
+            if currentId == targetId then
+                Window:Notify({ Title = "Enchant Complete", Content = targetEnchant .. " achieved!", Duration = 3 })
+                AutoEnchant = false
+                return
+            end
 
-                if currentEnchantId == targetEnchantId then
-                    print("========================================")
-                    print("[Enchant] ✅ SUCCESS! Target reached!")
-                    print("[Enchant] 🎯 Enchant:", targetEnchant)
-                    print("[Enchant] 🆔 ID:", targetEnchantId)
-                    print("========================================")
-                    _G.AutoEnchant = false
-                    return
-                end
+            -- Gunakan stack pertama yang masih memiliki quantity
+            local stones = findEnchantStones()
+            if #stones == 0 then
+                warn("[Enchant] No " .. SelectedStoneType .. " available!")
+                task.wait(2)
+                return
+            end
+            local stone = stones[1]  -- UUID stack, quantity >0 pasti karena difilter? perlu cek
+            pcall(function() equipItemRemote:FireServer(stone.UUID, "Enchant Stones") end)
+            task.wait(1)
 
-                local enchantStones = findEnchantStones()
-                if #enchantStones > 0 then
-                    local enchantStone = enchantStones[1]
-                    
-                    pcall(function()
-                        equipItemRemote:FireServer(enchantStone.UUID, "Enchant Stones")
-                    end)
+            -- Slot approximation (bisa diganti jika ada method lebih akurat)
+            local slot = countDisplayImageButtons() - 2
+            if slot < 1 then slot = 1 end
+            pcall(function() equipToolRemote:FireServer(slot) end)
+            task.wait(1)
 
-                    task.wait(1)
-
-                    local imageButtonCount = countDisplayImageButtons()
-                    local slotNumber = imageButtonCount - 2
-                    if slotNumber < 1 then slotNumber = 1 end
-
-                    pcall(function()
-                        equipToolRemote:FireServer(slotNumber)
-                    end)
-
-                    task.wait(1)
-
-                    pcall(function()
-                        activateAltarRemote:FireServer()
-                    end)
-                    
-                    print("[Enchant] 🪨", _G.SelectedStoneType, "→ Target:", targetEnchant)
-                else
-                    warn("[Enchant] ⚠️ No", _G.SelectedStoneType, "available! Waiting...")
-                    task.wait(2)
-                end
-
-                task.wait(5)
-            end)
-        end
+            pcall(function() activateAltarRemote:FireServer() end)
+            print("[Enchant] Applied " .. SelectedStoneType .. " → " .. targetEnchant)
+            task.wait(5)
+        end)
     end
 end)
+
+-- Opsi untuk menghentikan loop dari luar
+function StopEnchantLoop()
+    pcall(task.cancel, autoEnchantThread)
+end
+
+print("[Enchant] Features initialized")
 ------------------ Player Tab ------------------
 local Players = game:GetService("Players")
 local Player = Players.LocalPlayer
